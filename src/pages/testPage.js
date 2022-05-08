@@ -21,7 +21,7 @@ class TestPage extends React.Component {
 
   render() {
     return (
-      <div className="test-page">
+      <div className="test-page1">
         <h1>antd version: {version}</h1>
         <div className='btns' >
           <Button type="primary" onClick={() => this.quickclick()}>
