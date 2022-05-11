@@ -1,4 +1,5 @@
 import initSqlJs from "sql.js";
+/* eslint import/no-webpack-loader-syntax: off */
 import sqlWasm from "!!file-loader?name=sql-wasm-[contenthash].wasm!sql.js/dist/sql-wasm.wasm";
 
 class DBHelper {    
@@ -7,13 +8,9 @@ class DBHelper {
     }
 
     async init(file) {
-        console.log("11");
-        console.log(sqlWasm);
         let SQL = await initSqlJs({ locateFile: () => sqlWasm });
-        console.log("22");
         let fr = new FileReader();
         fr.readAsArrayBuffer(file);
-        console.log("33");
         fr.onload = () => {
             console.log(fr.result);
             const Uints = new Uint8Array(fr.result);
@@ -30,7 +27,7 @@ class DBHelper {
     }
 
     select(tablename) {
-        let content = this.db.run(`SELECT * FROM ${tablename}`);
+        let content = this.db.exec(`SELECT * FROM ${tablename}`);
         console.log(content);
         /*
         this.db.all(`select * from ${tablename}`, function(e, row) {

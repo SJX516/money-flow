@@ -10,10 +10,6 @@ const blockContent = `AntV 是蚂蚁金服全新一代数据可视化解决方�
 
 class TestPage extends React.Component {
 
-  constructor(props) {
-    super(props);
-  }
-
   initdb(files) {
     console.log(files);
     this.db = new DBHelper();
