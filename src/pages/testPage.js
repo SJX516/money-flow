@@ -1,6 +1,6 @@
 import React from 'react';
 import './testPage.css';
-import { Button, DatePicker, version } from "antd";
+import { Upload, Button, DatePicker, version } from "antd";
 import { Typography, Divider } from 'antd';
 import DBHelper from '../utils/db';
 
@@ -12,7 +12,13 @@ class TestPage extends React.Component {
 
   constructor(props) {
     super(props);
-    this.db = new DBHelper("../../res/test.db");
+  }
+
+  initdb(files) {
+    console.log(files);
+    this.db = new DBHelper();
+    console.log("xx");
+    this.db.init(files[0]);
   }
 
   quickclick() {
@@ -20,13 +26,35 @@ class TestPage extends React.Component {
   }
 
   render() {
+    const props = {
+      name: 'file',
+      action: 'https://www.mocky.io/v2/5cc8019d300000980a055e76',
+      headers: {
+        authorization: 'authorization-text',
+      },
+      onChange(info) {
+        if (info.file.status !== 'uploading') {
+          console.log(info.file, info.fileList);
+        }
+        if (info.file.status === 'done') {
+          console.log(`${info.file.name} file uploaded successfully`);
+        } else if (info.file.status === 'error') {
+          console.log(`${info.file.name} file upload failed.`);
+        }
+      },
+    };
+
     return (
       <div className="test-page1">
         <h1>antd version: {version}</h1>
         <div className='btns' >
+          <input type='file' id='dbfile' onChange={(e) => this.initdb(e.target.files)}/>
           <Button type="primary" onClick={() => this.quickclick()}>
             Primary Button
           </Button>
+          <Upload {...props}>
+            <Button>Click to Upload</Button>
+          </Upload>
           <Button>Default Button</Button>
           <Button type="dashed">Dashed Button</Button>
           <Button type="text">Text Button</Button>
