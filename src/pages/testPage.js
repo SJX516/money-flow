@@ -13,7 +13,7 @@ class TestPage extends React.Component {
   initdb(files) {
     console.log(files);
     this.db = new DBHelper();
-    console.log("xx");
+    console.log("xx11");
     this.db.init(files[0]);
   }
 
