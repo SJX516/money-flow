@@ -10,15 +10,30 @@ const blockContent = `AntV 是蚂蚁金服全新一代数据可视化解决方�
 
 class TestPage extends React.Component {
 
+  constructor(props) {
+    super(props);
+    this.count = 1;
+  }
+
   initdb(files) {
     console.log(files);
     this.db = new DBHelper();
-    console.log("xx11");
     this.db.init(files[0]);
   }
 
   quickclick() {
-    this.db.select("aa");
+    this.db?.select("aa");
+  }
+
+  quickclick2() {
+    for (var i = 0; i < 100000; i++) {
+      this.count++;
+      this.db?.insert("aa", [this.count, "name" + this.count, 1.3, "type" + this.count]);
+    }
+  }
+
+  quickclick3() {
+    this.db?.export();
   }
 
   render() {
@@ -48,13 +63,13 @@ class TestPage extends React.Component {
           <Button type="primary" onClick={() => this.quickclick()}>
             Primary Button
           </Button>
+          <Button onClick={() => this.quickclick2()}>Default Button</Button>
+          <Button type="dashed" onClick={() => this.quickclick3()}>Dashed Button</Button>
+          <Button type="text">Text Button</Button>
+          <Button type="link">Link Button</Button>
           <Upload {...props}>
             <Button>Click to Upload</Button>
           </Upload>
-          <Button>Default Button</Button>
-          <Button type="dashed">Dashed Button</Button>
-          <Button type="text">Text Button</Button>
-          <Button type="link">Link Button</Button>
         </div>
         <div className="pickers">
           <DatePicker />

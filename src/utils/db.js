@@ -23,27 +23,36 @@ class DBHelper {
         const buffer = Buffer.from(data);
 		var blob = new Blob([buffer]);
 		var url = window.URL.createObjectURL(blob);
-        console.log(url);
+        this.downloadFile(url)
+    }
+
+    downloadFile(url) {
+        console.log("下载文件：" + url);
+        var a = document.createElement("a");
+        document.body.appendChild(a);
+		a.href = url;
+		a.download = "data.db";
+		a.onclick = () => {
+            setTimeout(()=> {window.URL.revokeObjectURL(a.href)}, 1500);
+		};
+		a.click();
+    }
+
+    create(tablename) {
+        // this.db.run(`CREATE TABLE ${tablename} (col1, col2);`);
     }
 
     select(tablename) {
-        let content = this.db.exec(`SELECT * FROM ${tablename}`);
-        console.log(content);
-        /*
-        this.db.all(`select * from ${tablename}`, function(e, row) {
-            console.log(e);
-            console.log(JSON.stringify(row));
-        })
-        */
+        let content = this.db.exec(`SELECT * FROM ${tablename} where name=?`, ["name2"]);
+        console.log(JSON.stringify(content));
     }
 
-    insert(tablename) {
-        /*
-        this.db.run(`insert into ${tablename}`, function(e, row) {
-            console.log(e);
-            console.log(JSON.stringify(row));
-        })
-        */
+    insert(tablename, values) {
+      let sql = `INSERT INTO ${tablename} VALUES`
+      let placearr = Array.from({length:values.length}, (v, k) => "?")
+      sql += "(" + placearr.join(",") + ")"
+      console.log(sql + " " + values)
+      this.db.run(sql, values);
     }
 }
 
