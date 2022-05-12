@@ -1,39 +1,47 @@
-import React from 'react';
-import './testPage.css';
-import { Upload, Button, DatePicker, version } from "antd";
-import { Typography, Divider } from 'antd';
-import DBHelper from '../utils/db';
+import React from 'react'
+import './test_page.css'
+import { Upload, Button, DatePicker, version } from "antd"
+import { Typography, Divider } from 'antd'
+import DBHelper from '../utils/db'
+import { IncomeExpenditureDetail, IncomeExpenditureTypes } from '../domain/entity/income_expenditure'
+import { App } from '..'
 
-const { Title, Paragraph, Text, Link } = Typography;
+const { Title, Paragraph, Text, Link } = Typography
 const blockContent = `AntV 是蚂蚁金服全新一代数据可视化解决方案, 致力于提供一套简单方便、专业可靠、不限可能的数据可视化最佳实践。得益于丰富的业务场景和用户需求挑战，AntV 经历多年积累与不断打磨，已支撑整个阿里集团内外 20000+ 业务系统，通过了日均千万级 UV 产品的严苛考验。
-我们正在基础图表，图分析，图编辑，地理空间可视化，智能可视化等各个可视化的领域耕耘，欢迎同路人一起前行。`;
+我们正在基础图表，图分析，图编辑，地理空间可视化，智能可视化等各个可视化的领域耕耘，欢迎同路人一起前行。`
 
 class TestPage extends React.Component {
 
   constructor(props) {
-    super(props);
-    this.count = 1;
+    super(props)
+    this.count = 1
   }
 
   initdb(files) {
-    console.log(files);
-    this.db = new DBHelper();
-    this.db.init(files[0]);
+    console.log(files)
+    let db = new DBHelper()
+    db.init(files[0])
+    App.db = db
   }
 
   quickclick() {
-    this.db?.select("aa");
+    IncomeExpenditureDetail.repo.selectAll()
   }
 
   quickclick2() {
-    for (var i = 0; i < 100000; i++) {
-      this.count++;
-      this.db?.insert("aa", [this.count, "name" + this.count, 1.3, "type" + this.count]);
-    }
+    var detail = new IncomeExpenditureDetail()
+    detail.type = IncomeExpenditureTypes.Income_salary
+    detail.money = 2091000
+    detail.happenTime = new Date().timeStr()
+    detail.save()
   }
 
   quickclick3() {
-    this.db?.export();
+    IncomeExpenditureDetail.load(1)
+  }
+
+  quickclick4() {
+    App.db.export()
   }
 
   render() {
@@ -45,15 +53,15 @@ class TestPage extends React.Component {
       },
       onChange(info) {
         if (info.file.status !== 'uploading') {
-          console.log(info.file, info.fileList);
+          console.log(info.file, info.fileList)
         }
         if (info.file.status === 'done') {
-          console.log(`${info.file.name} file uploaded successfully`);
+          console.log(`${info.file.name} file uploaded successfully`)
         } else if (info.file.status === 'error') {
-          console.log(`${info.file.name} file upload failed.`);
+          console.log(`${info.file.name} file upload failed.`)
         }
       },
-    };
+    }
 
     return (
       <div className="test-page1">
@@ -61,11 +69,11 @@ class TestPage extends React.Component {
         <div className='btns' >
           <input type='file' id='dbfile' onChange={(e) => this.initdb(e.target.files)}/>
           <Button type="primary" onClick={() => this.quickclick()}>
-            Primary Button
+            Click 1
           </Button>
-          <Button onClick={() => this.quickclick2()}>Default Button</Button>
-          <Button type="dashed" onClick={() => this.quickclick3()}>Dashed Button</Button>
-          <Button type="text">Text Button</Button>
+          <Button onClick={() => this.quickclick2()}>Click 2</Button>
+          <Button type="dashed" onClick={() => this.quickclick3()}>Click 3</Button>
+          <Button type="text" onClick={() => this.quickclick4()}>保存</Button>
           <Button type="link">Link Button</Button>
           <Upload {...props}>
             <Button>Click to Upload</Button>
@@ -120,8 +128,8 @@ class TestPage extends React.Component {
           </Typography>
         </div>
       </div>
-    );
+    )
   }
 }
 
-export default TestPage;
+export default TestPage

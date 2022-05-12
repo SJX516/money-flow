@@ -42,8 +42,24 @@ class DBHelper {
         // this.db.run(`CREATE TABLE ${tablename} (col1, col2);`);
     }
 
-    select(tablename) {
-        let content = this.db.exec(`SELECT * FROM ${tablename} where name=?`, ["name2"]);
+    selectAll(tablename) {
+        this.select(tablename, [], [])
+    }
+
+    select(tablename, cols, values) {
+        let sql = `SELECT * FROM ${tablename}`
+        let valueDict = {}
+        for (var i = 0; i < cols.length; i++) {
+            if(i != 0) {
+                sql += " and "
+            } else {
+                sql += " where "
+            }
+            sql += " " + cols[i] + " = $" + cols[i]
+            valueDict['$' + cols[i]] = values[i]   
+        }
+        console.log(sql + " " + valueDict)
+        let content = this.db.exec(sql, valueDict);
         console.log(JSON.stringify(content));
     }
 
@@ -53,6 +69,19 @@ class DBHelper {
       sql += "(" + placearr.join(",") + ")"
       console.log(sql + " " + values)
       this.db.run(sql, values);
+    }
+
+    update(tablename, id, cols, values) {
+        let sql = `UPDATE ${tablename} SET`
+        let valueDict = {}
+        for (var i = 0; i < cols.length; i++) {
+            sql += " " + cols[i] + " = $" + cols[i]
+            valueDict['$' + cols[i]] = values[i]   
+        }
+        sql += " where id=$id"
+        valueDict['$id'] = id
+        console.log(sql + " " + valueDict)
+        this.db.run(sql, valueDict);
     }
 }
 
