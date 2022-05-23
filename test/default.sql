@@ -9,7 +9,6 @@ CREATE TABLE `income_expenditure_detail` (
  PRIMARY KEY (`id` AUTOINCREMENT)
 );
 
-
 CREATE TABLE `investment_detail` (
  `id` INTEGER NOT NULL  ,
  `gmt_create` datetime NOT NULL  ,

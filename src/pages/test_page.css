@@ -1,7 +1,11 @@
 body {
-  background-color: #8181aa26;
+    background-color: #8181aa26;
 }
 
-title, p, div, .btns, .pickers {
-  margin: 10px 10px;
+title,
+p,
+div,
+.btns,
+.pickers {
+    margin: 10px 10px;
 }

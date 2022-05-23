@@ -9,13 +9,13 @@ class DBHelper {
 
     async init(file) {
         let SQL = await initSqlJs({ locateFile: () => sqlWasm });
-        let fr = new FileReader();
-        fr.readAsArrayBuffer(file);
-        fr.onload = () => {
-            console.log(fr.result);
-            const Uints = new Uint8Array(fr.result);
-            this.db = new SQL.Database(Uints);
-        }
+        let fileResult = await new Promise((resolve, reject) => {
+            let fr = new FileReader();
+            fr.readAsArrayBuffer(file);
+            fr.onload = () => resolve(fr.result)
+        })
+        const Uints = new Uint8Array(fileResult);
+        this.db = new SQL.Database(Uints);
     }
 
     export() {
@@ -38,29 +38,18 @@ class DBHelper {
 		a.click();
     }
 
-    create(tablename) {
-        // this.db.run(`CREATE TABLE ${tablename} (col1, col2);`);
-    }
-
     selectAll(tablename) {
-        this.select(tablename, [], [])
+        return this.select(tablename, [], [], [])
     }
 
-    select(tablename, cols, values) {
+    select(tablename, cols, values, ops) {
         let sql = `SELECT * FROM ${tablename}`
-        let valueDict = {}
-        for (var i = 0; i < cols.length; i++) {
-            if(i != 0) {
-                sql += " and "
-            } else {
-                sql += " where "
-            }
-            sql += " " + cols[i] + " = $" + cols[i]
-            valueDict['$' + cols[i]] = values[i]   
-        }
-        console.log(sql + " " + valueDict)
-        let content = this.db.exec(sql, valueDict);
-        console.log(JSON.stringify(content));
+        let data = this.genWhereSql(cols, values, ops)
+        let valueDict = data[1]
+        sql += data[0]
+        console.log(sql + " " + JSON.stringify(valueDict))
+        let content = this.db.exec(sql, valueDict)
+        return content
     }
 
     insert(tablename, values) {
@@ -71,17 +60,46 @@ class DBHelper {
       this.db.run(sql, values);
     }
 
-    update(tablename, id, cols, values) {
+    update(tablename, cols, values, ops) {
         let sql = `UPDATE ${tablename} SET`
+        let data = this.genWhereSql(cols, values, ops)
+        let valueDict = data[1]
+        sql += data[0]
+        console.log(sql + " " + JSON.stringify(valueDict))
+        this.db.run(sql, valueDict);
+    }
+
+    deleteAll(tablename) {
+        this.delete(tablename, [], [])
+    }
+
+    delete(tablename, cols, values, ops) {
+        let sql = `DELETE FROM ${tablename}`
+        let data = this.genWhereSql(cols, values, ops)
+        let valueDict = data[1]
+        sql += data[0]
+        console.log(sql + " " + JSON.stringify(valueDict))
+        let content = this.db.exec(sql, valueDict)
+        console.log(JSON.stringify(content))
+    }
+
+    genWhereSql(cols, values, ops) {
+        let sql = ""
         let valueDict = {}
         for (var i = 0; i < cols.length; i++) {
-            sql += " " + cols[i] + " = $" + cols[i]
-            valueDict['$' + cols[i]] = values[i]   
+            if(i !== 0) {
+                sql += " and "
+            } else {
+                sql += " where "
+            }
+            let op = ops[i]
+            if(op === undefined){
+                op = "="
+            }
+            sql += " " + cols[i] + " " + op + " $" + cols[i] + i
+            valueDict['$' + cols[i] + i] = values[i]   
         }
-        sql += " where id=$id"
-        valueDict['$id'] = id
-        console.log(sql + " " + valueDict)
-        this.db.run(sql, valueDict);
+        return [sql, valueDict]
     }
 }
 

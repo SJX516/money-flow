@@ -1,5 +1,4 @@
 import { App } from '../..';
-import DBHelper from '../../utils/db';
 
 class BaseRepo {
 
@@ -20,7 +19,7 @@ class BaseRepo {
            }
             for(var k in o) {
                if(new RegExp("("+ k +")").test(fmt)){
-                    fmt = fmt.replace(RegExp.$1, (RegExp.$1.length==1) ? (o[k]) : (("00"+ o[k]).substr((""+ o[k]).length)));
+                    fmt = fmt.replace(RegExp.$1, (RegExp.$1.length===1) ? (o[k]) : (("00"+ o[k]).substr((""+ o[k]).length)));
                 }
             }
            return fmt; 
@@ -30,17 +29,37 @@ class BaseRepo {
         }
     }
 
+    static getDateStr(date, allowNull=false) {
+        if(date == null) {
+            if(allowNull) {
+                return new Date().timeStr()
+            } else {
+                throw new Error("日期不能为 null")
+            }
+        } else if(date instanceof Date) {
+            return date.timeStr()
+        } else {
+            throw new Error("日期格式不为 Date")
+        }
+    }
+
     get(id) {
         if (id != null) {
-            App.db.select(this.tablename, ["id"], [id])
+            return this.convert(App.db.select(this.tablename, ["id"], [id]))
         } else {
-            throw "id 不能为空"
+            throw new Error("id 不能为空")
         }
     }
 
     selectAll() {
-        App.db.selectAll(this.tablename)
+        return this.convert(App.db.selectAll(this.tablename))
     }
+
+    deleteAll() {
+        App.db.deleteAll(this.tablename)
+    }
+
+    convert(content) {}
 }
 
 export {BaseRepo}

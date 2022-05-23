@@ -1,3 +1,35 @@
+const a = createEnum({
+    "AA": [1, "AAAA"],
+    BB: [2, "BBBB"]
+})
+
+function createEnum(definition) {
+    const strToValueMap = {}
+    const numToDescMap = {}
+    for (const enumName of Object.keys(definition)) {
+      const [value, desc] = definition[enumName]
+      strToValueMap[enumName] = value
+      numToDescMap[value] = desc
+    }
+    return {
+      ...strToValueMap,
+      getDesc(enumName) {
+        return (definition[enumName] && definition[enumName][1]) || ''
+      },
+      getDescFromValue(value) {
+        return numToDescMap[value] || ''
+      },
+      values() {
+        return definition
+      }
+    }
+}
+
+console.log(a.AA)
+console.log(a.BB)
+console.log(a.getDesc("AA"))
+console.log(a.values())
+
 
 class SS {
     t = "SS"
@@ -11,15 +43,18 @@ class SS {
 }
 
 class S1 extends SS {
-    t = "S2"
-    constructor() {
-        super()
+    // t = "S2"
+    // constructor() {
+        // super()
         // this.t = "S1"
-    }
+    // }
 }
 
 var ss = new SS()
 var s1 = new S1()
+
+console.log(ss.t)
+console.log(s1.t)
 
 Date.prototype.format = function(fmt) { 
     var o = { 
