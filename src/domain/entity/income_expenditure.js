@@ -25,6 +25,10 @@ class IncomeExpenditureDetail extends BaseEntity {
         return this.repo.select(startTime, endTime)
     }
 
+    static delete(id) {
+        IncomeExpenditureDetail.repo.delete(id)
+    }
+
     save() {
         this.gmtModified = new Date()
         if(this.money*this.type.code < 0) {
@@ -50,7 +54,51 @@ class IncomeExpenditureType {
             self: new IncomeExpenditureType(-10000, "住房"),
             rent: new IncomeExpenditureType(-10001, "住房-房租"),
             utility: new IncomeExpenditureType(-10002, "住房-水电"),
-        }
+        },
+        daily: {
+            self: new IncomeExpenditureType(-20000, "日常"),
+            taxi: new IncomeExpenditureType(-20001, "日常-交通"),
+            phone: new IncomeExpenditureType(-20002, "日常-话费"),
+        },
+        shopping: {
+            self: new IncomeExpenditureType(-30000, "购物"),
+            elc: new IncomeExpenditureType(-30001, "购物-电子"),
+            life: new IncomeExpenditureType(-30002, "购物-生活"),
+        },
+        happy: {
+            self: new IncomeExpenditureType(-40000, "娱乐"),
+            online: new IncomeExpenditureType(-40001, "娱乐-线上"),
+            offline: new IncomeExpenditureType(-40002, "娱乐-线下"),
+        },
+        food: {
+            self: new IncomeExpenditureType(-50000, "餐饮"),
+            canteen: new IncomeExpenditureType(-50001, "餐饮-食堂"),
+            out: new IncomeExpenditureType(-50002, "餐饮-外出"),
+        },
+        family: {
+            self: new IncomeExpenditureType(-60000, "家人"),
+            traval: new IncomeExpenditureType(-60001, "家人-交通"),
+            gift: new IncomeExpenditureType(-60002, "家人-礼物"),
+        },
+        study: {
+            self: new IncomeExpenditureType(-70000, "学习"),
+            online: new IncomeExpenditureType(-70001, "学习-线上"),
+            offline: new IncomeExpenditureType(-70002, "学习-线下"),
+        },
+        health: {
+            self: new IncomeExpenditureType(-80000, "健康"),
+        },
+        car: {
+            self: new IncomeExpenditureType(-90000, "车"),
+            etc: new IncomeExpenditureType(-90001, "车-停车/ETC"),
+            oil: new IncomeExpenditureType(-90002, "车-加油"),
+        },
+        girlfriend: {
+            self: new IncomeExpenditureType(-100000, "女朋友"),
+            traval: new IncomeExpenditureType(-100001, "女朋友-旅游"),
+            eat: new IncomeExpenditureType(-100002, "女朋友-吃喝"),
+            gift: new IncomeExpenditureType(-100003, "女朋友-礼物"),
+        },
     }
 
     constructor(code, name) {
@@ -60,7 +108,7 @@ class IncomeExpenditureType {
 
     static getByCode(code) {
         for(const type of this.values()) {
-            if(type.code === code) {
+            if(type.code == code) {
                 return type
             }
         }

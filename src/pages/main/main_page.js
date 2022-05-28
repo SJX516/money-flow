@@ -1,10 +1,14 @@
 import React from 'react'
 import { Button, Layout, Breadcrumb, Menu } from "antd"
-import './main_page.css'
 import { IncomeExpenditureService } from '../../domain/service/income_expenditure_service'
 import { App } from '../..'
 import { IncomeExpenditureDetail, IncomeExpenditureType } from '../../domain/entity/income_expenditure'
 import MonthPage from '../detail/month_page';
+import TodoPage from '../detail/todo_page'
+import InvestPage from '../detail/invest_page'
+import { InvestmentProductRepo } from '../../domain/repo/investment_repo'
+import { InvestmentDetail, InvestmentProduct } from '../../domain/entity/investment'
+import { DataUtil } from '../../utils/utils'
 
 const { Header, Content, Sider } = Layout;
 
@@ -12,25 +16,24 @@ class MainPage extends React.Component {
 
     constructor(props) {
         super(props)
-        this.navItems = ['by_month', 'todo'].map((key) => {
+        this.navItems = ['by_month', 'invest_detail', 'todo'].map((key) => {
             switch (key) {
                 case 'by_month':
                     return { key, label: "按月展示" }
+                case 'invest_detail':
+                    return { key, label: "投资详情" }
                 default:
                     return { key, label: "TODO" }
             }
         });
         this.state = {
-            navKey: "by_month",
-            sideDatas: {},
-            currentMonth: ""
+            navKey: "invest_detail",
         }
     }
 
     async refreshDB(files) {
         console.log(files)
         await App.initDb(files[0])
-        this.refreshMainView()
     }
 
     export() {
@@ -38,51 +41,54 @@ class MainPage extends React.Component {
     }
 
     click1() {
-        console.log(IncomeExpenditureDetail.repo.selectAll())
+        console.log(InvestmentDetail.repo.selectAll())
     }
 
     click2() {
-        IncomeExpenditureService.upsert(1100, IncomeExpenditureType.Incomme.salary, new Date('2022-04-01'))
-        IncomeExpenditureService.upsert(1200, IncomeExpenditureType.Incomme.luckmoney.self, new Date('2022-04-02'))
-        IncomeExpenditureService.upsert(1300, IncomeExpenditureType.Incomme.luckmoney.home, new Date('2022-04-02'))
-        IncomeExpenditureService.upsert(1400, IncomeExpenditureType.Incomme.luckmoney.work, new Date('2022-04-02'))
-        IncomeExpenditureService.upsert(-3200, IncomeExpenditureType.Expenditure.home.self, new Date('2022-04-02'))
-        IncomeExpenditureService.upsert(-2200, IncomeExpenditureType.Expenditure.home.rent, new Date('2022-04-02'))
-        IncomeExpenditureService.upsert(-4200, IncomeExpenditureType.Expenditure.home.utility, new Date('2022-04-28'))
     }
 
     click3() {
-        IncomeExpenditureDetail.repo.deleteAll()
+        InvestmentProduct.repo.deleteAll()
     }
 
-    refreshMainView() {
-        let months = {
+    getByMonthSideDatas() {
+        return {
             "2021": ["2021-12"],
-            "2022": ['2022-01', '2022-02', '2022-03', '2022-04', '2022-05'],
+            "2022": ["2022-04", "2022-05"],
         }
-
-        this.setState({
-            navKey: "by_month",
-            sideDatas: months,
-            currentMonth: '2022-05'
-        })
     }
 
     render() {
-        let allYear = []
-        let siderItems = Object.keys(this.state.sideDatas).sort((a, b) => b > a ? 1 : -1).map((year, i) => {
-            allYear.push(year)
-            return {
-                key: year,
-                label: year,
-                children: this.state.sideDatas[year].sort((a, b) => b > a ? 1 : -1).map((month, j) => {
-                    return {
-                        key: month,
-                        label: month,
-                    };
-                }),
-            };
-        })
+        let navKey = this.state.navKey
+        let siderItems = []
+        let subPage = null
+        let openKeys = []
+        if(navKey === 'by_month') {
+            let sideDatas = this.getByMonthSideDatas()
+            let lastMonth = null
+            siderItems = Object.keys(sideDatas).sort((a, b) => b > a ? 1 : -1).map((year, i) => {
+                openKeys.push(year)
+                return {
+                    key: year,
+                    label: year,
+                    children: sideDatas[year].sort((a, b) => b > a ? 1 : -1).map((month, j) => {
+                        if(lastMonth == null) { lastMonth = month}
+                        return {
+                            key: month,
+                            label: month,
+                        };
+                    }),
+                };
+            })
+            if(DataUtil.isNull(this.state.sideKey)) {
+                this.state.sideKey = lastMonth
+            }
+            subPage = <MonthPage month={this.state.sideKey}/>
+        } else if(navKey === 'invest_detail') {
+            subPage = <InvestPage/>
+        } else {
+            subPage = <TodoPage />
+        }
         return (
             <Layout>
                 <div>
@@ -93,26 +99,30 @@ class MainPage extends React.Component {
                     <Button onClick={() => this.click3()}>清空</Button>
                 </div>
                 <Header className="header">
-                    <Menu theme="dark" mode="horizontal" selectedKeys={[this.state.navKey]} items={this.navItems} />
+                    <Menu theme="dark" mode="horizontal" items={this.navItems} defaultSelectedKeys={[navKey]}
+                        onSelect={(item) => {
+                            this.setState(() => this.state.navKey = item.key)
+                        }}/>
                 </Header>
                 <Layout>
                     <Sider width={200} className="site-layout-background">
                         <Menu
                             className='Menu'
                             mode="inline"
-                            openKeys={allYear}
-                            selectedKeys={[this.state.currentMonth]}
+                            openKeys={openKeys}
+                            selectedKeys={[this.state.sideKey]}
                             items={siderItems}
+                            onSelect={(item) => {
+                                this.setState(() => this.state.sideKey = item.key)
+                            }}
                         />
                     </Sider>
                     <Layout className='Layout-inner'>
-                        <Breadcrumb className='Breadcrumb'>
+                        <Breadcrumb>
                             <Breadcrumb.Item>{this.state.navKey}</Breadcrumb.Item>
-                            <Breadcrumb.Item>{this.state.currentMonth}</Breadcrumb.Item>
+                            <Breadcrumb.Item>{this.state.sideKey}</Breadcrumb.Item>
                         </Breadcrumb>
-                        <Content className='Content'>
-                            <MonthPage month={this.state.currentMonth}/>
-                        </Content>
+                        {subPage}
                     </Layout>
                 </Layout>
             </Layout>

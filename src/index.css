@@ -1,4 +1,4 @@
-@import 'antd/dist/antd.css';
+@import '~antd/dist/antd.css';
 
 body {
     margin: 0;
@@ -12,4 +12,32 @@ body {
 code {
     font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
         monospace;
+}
+
+.col-block {
+    background: #eee;
+}
+
+.Layout-inner {
+    padding: 0 24px 24px;
+}
+
+.Content {
+    background: #fff;
+    padding: 10px;
+    min-height: 700px;
+}
+
+.Menu {
+    height: 100%;
+    border-right: 0;
+}
+
+.ant-breadcrumb {
+    margin: 16px 0;
+}
+
+#dbfile {
+    margin: 10px 10px;
+    font-size: 16px;
 }

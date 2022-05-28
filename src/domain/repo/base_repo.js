@@ -1,4 +1,4 @@
-import { App } from '../..';
+import { App, DB_INIT } from '../..';
 
 class BaseRepo {
 
@@ -44,18 +44,34 @@ class BaseRepo {
     }
 
     get(id) {
+        if(!DB_INIT) {
+            return null
+        }
         if (id != null) {
-            return this.convert(App.db.select(this.tablename, ["id"], [id]))
+            return this.convert(App.db.select(this.tablename, ["id"], [id], []))
         } else {
             throw new Error("id 不能为空")
         }
     }
 
     selectAll() {
+        if(!DB_INIT) {
+            return []
+        }
         return this.convert(App.db.selectAll(this.tablename))
     }
 
+    delete(id) {
+        if(!DB_INIT) {
+            return
+        }
+        App.db.delete(this.tablename, ["id"], [id], [])
+    }
+
     deleteAll() {
+        if(!DB_INIT) {
+            return
+        }
         App.db.deleteAll(this.tablename)
     }
 

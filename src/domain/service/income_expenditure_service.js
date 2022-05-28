@@ -23,7 +23,7 @@ class IncomeExpenditureService {
         detail.desc = desc
         detail.money = money
         detail.happenTime = happenTime
-        this.upsertObj(detail)
+        detail.save()
     }
 
     /**
@@ -31,15 +31,15 @@ class IncomeExpenditureService {
      * @returns {Array[IncomeExpenditureDetail]}
      */
     static queryMonth(month) {
-        let startDate = TimeUtil.monthStartOfStr(month)
+        let startDate = TimeUtil.monthStart(new Date(month))
         return IncomeExpenditureDetail.queryTimeBetwen(startDate, TimeUtil.monthEnd(startDate))
     }
 
     /**
      * @param {IncomeExpenditureDetail} detail 
      */
-    static upsertObj(detail) {
-        detail.save()
+    static delete(detail) {
+        IncomeExpenditureDetail.delete(detail.id)
     }
 
 

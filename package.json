@@ -8,6 +8,7 @@
     "react-app-rewired": "^2.2.1",
     "react-dom": "^17.0.2",
     "react-scripts": "4.0.3",
+    "react-error-overlay": "6.0.9",
     "sql.js": "^1.6.2"
   },
   "devDependencies": {

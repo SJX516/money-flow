@@ -52,25 +52,35 @@ class DBHelper {
         return content
     }
 
-    insert(tablename, values) {
-      let sql = `INSERT INTO ${tablename} VALUES`
-      let placearr = Array.from({length:values.length}, (v, k) => "?")
-      sql += "(" + placearr.join(",") + ")"
-      console.log(sql + " " + values)
-      this.db.run(sql, values);
+    insert(tablename, cols, values) {
+      let sql = `INSERT INTO ${tablename} (${cols.join(',')}) VALUES (`
+      let valueDict = {}
+      for (var i = 0; i < cols.length; i++) {
+          sql += "$" + cols[i] + i 
+          if(i < cols.length - 1) {
+              sql += ", "
+          }
+          valueDict['$' + cols[i] + i] = values[i]   
+      }
+      sql += ") returning id"
+      console.log(sql + " " + JSON.stringify(valueDict))
+      var content = this.db.exec(sql, valueDict);
+      return content[0].values[0][0]
     }
 
-    update(tablename, cols, values, ops) {
+    update(tablename, id, cols, values) {
         let sql = `UPDATE ${tablename} SET`
-        let data = this.genWhereSql(cols, values, ops)
+        let data = this.genSubSql(cols, values, [], false)
         let valueDict = data[1]
         sql += data[0]
+        sql += " where id=$id"
+        valueDict['$id'] = id
         console.log(sql + " " + JSON.stringify(valueDict))
         this.db.run(sql, valueDict);
     }
 
     deleteAll(tablename) {
-        this.delete(tablename, [], [])
+        this.delete(tablename, [], [], [])
     }
 
     delete(tablename, cols, values, ops) {
@@ -84,13 +94,19 @@ class DBHelper {
     }
 
     genWhereSql(cols, values, ops) {
+        return this.genSubSql(cols, values, ops, true)
+    }
+
+    genSubSql(cols, values, ops, isWhere) {
         let sql = ""
         let valueDict = {}
         for (var i = 0; i < cols.length; i++) {
-            if(i !== 0) {
-                sql += " and "
-            } else {
-                sql += " where "
+            if(isWhere) {
+                if(i !== 0) {
+                    sql += " and "
+                } else {
+                    sql += " where "
+                }
             }
             let op = ops[i]
             if(op === undefined){
