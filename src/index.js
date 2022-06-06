@@ -4,8 +4,16 @@ import './index.css';
 import TestPage from './pages/test_page';
 import MainPage from './pages/main/main_page';
 import DBHelper from './utils/db';
+import moment from 'moment';
+import 'moment/locale/zh-cn';
+import zhCN from 'antd/lib/locale/zh_CN';
+import { ConfigProvider } from 'antd';
 
-ReactDOM.render(<MainPage />, document.getElementById('root'));
+moment.locale('zh-cn');
+
+ReactDOM.render(<ConfigProvider locale={zhCN}>
+    <MainPage key={"mainpage"}/>
+</ConfigProvider>, document.getElementById('root'));
 
 // window.onerror = function(message, source, lineNumber, colno, error) {
 //     alert("Console 查看错误信息：" + message);
@@ -26,4 +34,4 @@ class App {
     }
 }
 
-export {App, DB_INIT}
+export { App, DB_INIT }

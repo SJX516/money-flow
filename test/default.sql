@@ -15,10 +15,12 @@ CREATE TABLE `investment_detail` (
  `gmt_modified` datetime NOT NULL  ,
  `product_id` INTEGER NOT NULL  ,
  `product_name` varchar(64) NOT NULL  ,
- `money` INTEGER NOT NULL  ,
+ `product_type` INTEGER NOT NULL  ,
+ `money` INTEGER NOT NULL,
  `happen_time` datetime NOT NULL  ,
  `buy_sell_id` INTEGER,
  `record_type` int NOT NULL ,
+ `count` INTEGER,
  PRIMARY KEY (`id` AUTOINCREMENT)
 );
 
@@ -34,12 +36,13 @@ CREATE TABLE `investment_product` (
 );
 
 
-CREATE TABLE `asset_summary` (
+CREATE TABLE `data_summary` (
  `id` INTEGER NOT NULL  ,
  `gmt_create` datetime NOT NULL  ,
  `gmt_modified` datetime NOT NULL  ,
- `money` INTEGER NOT NULL  ,
- `happen_time` datetime NOT NULL  ,
+ `type` varchar(64) NOT NULL ,
+ `time` datetime NOT NULL  ,
+ `money` INTEGER,
  PRIMARY KEY (`id` AUTOINCREMENT)
 );
 

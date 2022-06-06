@@ -41,12 +41,19 @@ class IncomeExpenditureDetail extends BaseEntity {
 
 class IncomeExpenditureType {
     static Incomme = {
-        salary: new IncomeExpenditureType(10000, "薪水"),
+        salary: {
+            self: new IncomeExpenditureType(10000, "薪水"),
+            num13: new IncomeExpenditureType(10001, "薪水-十三薪"),
+            bonus: new IncomeExpenditureType(10002, "薪水-年终奖"),
+        },
         luckmoney: {
             self: new IncomeExpenditureType(20000, "红包"),
             work: new IncomeExpenditureType(20001, "红包-工作"),
             home: new IncomeExpenditureType(20002, "红包-家人"),
         },
+        other: {
+            self: new IncomeExpenditureType(30000, "其他"),
+        }
     };
 
     static Expenditure = {
@@ -98,6 +105,9 @@ class IncomeExpenditureType {
             traval: new IncomeExpenditureType(-100001, "女朋友-旅游"),
             eat: new IncomeExpenditureType(-100002, "女朋友-吃喝"),
             gift: new IncomeExpenditureType(-100003, "女朋友-礼物"),
+        },
+        other: {
+            self: new IncomeExpenditureType(-110000, "其他"),
         },
     }
 

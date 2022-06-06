@@ -2,7 +2,7 @@ import initSqlJs from "sql.js";
 /* eslint import/no-webpack-loader-syntax: off */
 import sqlWasm from "!!file-loader?name=sql-wasm-[contenthash].wasm!sql.js/dist/sql-wasm.wasm";
 
-class DBHelper {    
+class DBHelper {
     constructor() {
         this.db = null;
     }
@@ -21,8 +21,8 @@ class DBHelper {
     export() {
         const data = this.db.export();
         const buffer = Buffer.from(data);
-		var blob = new Blob([buffer]);
-		var url = window.URL.createObjectURL(blob);
+        var blob = new Blob([buffer]);
+        var url = window.URL.createObjectURL(blob);
         this.downloadFile(url)
     }
 
@@ -30,12 +30,12 @@ class DBHelper {
         console.log("下载文件：" + url);
         var a = document.createElement("a");
         document.body.appendChild(a);
-		a.href = url;
-		a.download = "data.db";
-		a.onclick = () => {
-            setTimeout(()=> {window.URL.revokeObjectURL(a.href)}, 1500);
-		};
-		a.click();
+        a.href = url;
+        a.download = "data.db";
+        a.onclick = () => {
+            setTimeout(() => { window.URL.revokeObjectURL(a.href) }, 1500);
+        };
+        a.click();
     }
 
     selectAll(tablename) {
@@ -43,29 +43,36 @@ class DBHelper {
     }
 
     select(tablename, cols, values, ops) {
+        return this.selectAndOrder(tablename, cols, values, ops, [])
+    }
+
+    selectAndOrder(tablename, cols, values, ops, orders) {
         let sql = `SELECT * FROM ${tablename}`
         let data = this.genWhereSql(cols, values, ops)
         let valueDict = data[1]
         sql += data[0]
+        if (orders.length > 0) {
+            sql += ` order by ${orders.join(',')}`
+        }
         console.log(sql + " " + JSON.stringify(valueDict))
         let content = this.db.exec(sql, valueDict)
         return content
     }
 
     insert(tablename, cols, values) {
-      let sql = `INSERT INTO ${tablename} (${cols.join(',')}) VALUES (`
-      let valueDict = {}
-      for (var i = 0; i < cols.length; i++) {
-          sql += "$" + cols[i] + i 
-          if(i < cols.length - 1) {
-              sql += ", "
-          }
-          valueDict['$' + cols[i] + i] = values[i]   
-      }
-      sql += ") returning id"
-      console.log(sql + " " + JSON.stringify(valueDict))
-      var content = this.db.exec(sql, valueDict);
-      return content[0].values[0][0]
+        let sql = `INSERT INTO ${tablename} (${cols.join(',')}) VALUES (`
+        let valueDict = {}
+        for (var i = 0; i < cols.length; i++) {
+            sql += "$" + cols[i] + i
+            if (i < cols.length - 1) {
+                sql += ", "
+            }
+            valueDict['$' + cols[i] + i] = values[i]
+        }
+        sql += ") returning id"
+        console.log(sql + " " + JSON.stringify(valueDict))
+        var content = this.db.exec(sql, valueDict);
+        return content[0].values[0][0]
     }
 
     update(tablename, id, cols, values) {
@@ -101,19 +108,17 @@ class DBHelper {
         let sql = ""
         let valueDict = {}
         for (var i = 0; i < cols.length; i++) {
-            if(isWhere) {
-                if(i !== 0) {
-                    sql += " and "
-                } else {
-                    sql += " where "
-                }
+            if (i !== 0) {
+                sql += (isWhere ? " and " : " , ")
+            } else {
+                sql += (isWhere ? " where " : " ")
             }
             let op = ops[i]
-            if(op === undefined){
+            if (op === undefined) {
                 op = "="
             }
             sql += " " + cols[i] + " " + op + " $" + cols[i] + i
-            valueDict['$' + cols[i] + i] = values[i]   
+            valueDict['$' + cols[i] + i] = values[i]
         }
         return [sql, valueDict]
     }

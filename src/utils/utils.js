@@ -1,3 +1,35 @@
+class MoneyUtil {
+    static getStr(money) {
+        if(DataUtil.isEmpty(money) || DataUtil.notNumber(money) || money == 0) {
+            return "-"
+        }
+        let temp = money / 100
+        if(temp % 1 === 0) {
+            return `￥${temp}`
+        } else {
+            return `￥${temp.toFixed(2)}`
+        }
+    }
+
+    static compare(money1, money2) {
+        if(DataUtil.notNumber(money1)) {
+            return -1
+        } else if (DataUtil.notNumber(money2)) {
+            return 1
+        }
+        return money1 - money2
+    }
+
+    // a / b
+    static safeDivision(a, b) {
+        if(DataUtil.notNumber(a) || DataUtil.notNumber(b) || b == 0) {
+            return null
+        } else {
+            return a / b
+        }
+    }
+}
+
 class DataUtil {
     static isEmpty(str) {
         return str === undefined || str === null || str === ""
@@ -5,6 +37,19 @@ class DataUtil {
 
     static isNull(o) {
         return o === undefined || o === null
+    }
+
+    static notNumber(o) {
+        return this.isNull(o) || isNaN(o)
+    }
+
+    static getPercent(a) {
+        let temp = a * 100
+        if(temp % 1 === 0) {
+            return `${temp}%`
+        } else {
+            return `${temp.toFixed(2)}%`
+        }
     }
 }
 
@@ -32,6 +77,10 @@ class TimeUtil {
         return new Date(`${year}-${month}-01 00:00:00`)
     }
 
+    static lastMonthEnd(time1) {
+        return new Date(this.monthStart(time1) - 1)
+    }
+
     static inMonth(time1, monthTime) {
         let currentMonthStart = TimeUtil.monthStart(monthTime)
         let currentMonthEnd = TimeUtil.monthEnd(monthTime)
@@ -43,7 +92,14 @@ class TimeUtil {
     }
 
     static dayStr(time1) {
+        if(DataUtil.isNull(time1)) {
+            return ""
+        }
         return time1.timeStr().substring(0, 10)
+    }
+
+    static monthStr(time1) {
+        return time1.timeStr().substring(0, 7)
     }
 
     static weekDayStr(time1) {
@@ -67,4 +123,4 @@ class TimeUtil {
     }
 }
 
-export { DataUtil, TimeUtil }
+export { DataUtil, TimeUtil, MoneyUtil }

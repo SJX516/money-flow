@@ -1,3 +1,4 @@
+import { DataUtil } from '../../utils/utils';
 import { InvestmentDetailRepo, InvestmentProductRepo } from '../repo/investment_repo';
 import { BaseEntity } from './base_entity';
 
@@ -10,6 +11,7 @@ class InvestmentProduct extends BaseEntity {
      */
     type = null
     desc = null
+    fixVote = null
 
     static repo = new InvestmentProductRepo()
 
@@ -21,10 +23,11 @@ class InvestmentProduct extends BaseEntity {
         InvestmentProduct.repo.delete(id)
     }
 
-    static 
-
     save() {
         this.gmtModified = new Date()
+        if(DataUtil.isNull(this.fixVote)) {
+            this.fixVote = 0
+        }
         InvestmentProduct.repo.upsert(this)
     }
 }
@@ -33,8 +36,14 @@ class InvestmentProduct extends BaseEntity {
  class InvestmentDetail extends BaseEntity {
     productId = null
     productName = null
+    /**
+     * @type {InvestmentType}
+     */
+    productType = null
     //分为单位，买入为正，卖出为负
     money = null
+    //份数，只在表示股票时候可能存在，用于计算成本价
+    count = null
     //实际发生时间，不确定可以填月初
     happenTime = null
     /**
@@ -55,24 +64,26 @@ class InvestmentProduct extends BaseEntity {
     static queryTimeBetwen(productId, recordType, startTime, endTime) {
         return this.repo.select(productId, recordType, startTime, endTime)
     }
-
+    
     save() {
         this.gmtModified = new Date()
         return InvestmentDetail.repo.upsert(this)
     }
 
     delete() {
-        InvestmentDetail.repo.delete(this.id)
-        if(this.type.code === InvestmentRecordType.BuySell.code) {
-            InvestmentDetail.repo.deleteBySellId(this.buySellId)
+        if(this.recordType.code === InvestmentRecordType.BuySell.code) {
+            InvestmentDetail.repo.deleteBySellId(this.id)
         }
+        InvestmentDetail.repo.delete(this.id)
     }
 }
 
 class InvestmentRecordType {
     static BuySell = new InvestmentRecordType(1, "买入或卖出")
-    static CurrentPrice = new InvestmentRecordType(2, "现价")
-    static Profit = new InvestmentRecordType(3, "收益")
+    static CurrentPrice = new InvestmentRecordType(2, "投资类现价")
+    static Profit = new InvestmentRecordType(3, "投资类收益")
+    static AssetDebtCurrentPrice = new InvestmentRecordType(4, "资产/负债类现价")
+    static AssetDebtProfit = new InvestmentRecordType(5, "资产/负债类收益")
 
     constructor(code, name) {
         this.code = code
@@ -89,17 +100,18 @@ class InvestmentRecordType {
     }
 
     static values() {
-        return [this.BuySell, this.CurrentPrice, this.Profit]
+        return [this.BuySell, this.CurrentPrice, this.Profit, this.AssetDebtCurrentPrice, this.AssetDebtProfit]
     }
 }
 
 class InvestmentType {
     static Product = {
-        saving: new InvestmentType(1000000, "储蓄"),
+        saving: new InvestmentType(1000000, "现金类资产"),
         stock_fund: new InvestmentType(2000000, "股票类基金"),
         etf: new InvestmentType(3000000, "指数类基金"),
         bond: new InvestmentType(4000000, "债券类基金"),
         stock: new InvestmentType(5000000, "股票"),
+        debt: new InvestmentType(6000000, "负债"),
     };
 
     constructor(code, name) {
@@ -131,6 +143,14 @@ class InvestmentType {
 
     static values() {
         return this.toList(this.Product)
+    }
+
+    isAsset() {
+        return this === InvestmentType.Product.saving
+    }
+
+    isDebt() {
+        return this === InvestmentType.Product.debt
     }
 }
 

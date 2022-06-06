@@ -1,5 +1,5 @@
 import React from 'react'
-import { Button, Layout, Input, Select, Space, Card, InputNumber, Row, Col, Divider, DatePicker, Popover, Typography } from "antd"
+import { Button, message, Layout, Input, Select, Space, Card, InputNumber, Row, Col, Divider, DatePicker, Popover, Typography } from "antd"
 import { DataUtil, TimeUtil } from '../../../utils/utils';
 import moment from 'moment';
 
@@ -7,7 +7,7 @@ const { Option } = Select;
 const { Header, Content, Sider } = Layout;
 const { Title, Paragraph, Text, Link } = Typography;
 
-const ItemNames = ["type", "name", "desc", "money", "currentPrice", "currentProfit", "date"]
+const ItemNames = ["type", "name", "desc", "money", "currentPrice", "currentProfit", "sellProfit", "count", "date"]
 
 class InputWidget extends React.Component {
 
@@ -19,8 +19,11 @@ class InputWidget extends React.Component {
     static getMoney(s, key) {
         let ponKey = key + "Pon"
         let pon = s[ponKey] ? 1 : -1
-        let money = s[key] * pon * 100
-        return money
+        if(DataUtil.notNumber(s[key])) {
+            return NaN
+        } else {
+            return s[key] * pon * 100
+        }
     }
 
     getInitialState() {
@@ -34,7 +37,7 @@ class InputWidget extends React.Component {
     getOpts(code2Name) {
         let opts = []
         for (let code of Object.keys(code2Name)) {
-            opts.push(<Option value={code}>{code2Name[code]}</Option>)
+            opts.push(<Option key={code} value={code}>{code2Name[code][0]}</Option>)
         }
         return opts
     }
@@ -42,21 +45,30 @@ class InputWidget extends React.Component {
     itemToWidget(item) {
         let stateCode = item.name
         let nameAppend = (item.required ?? false) ? "(必填)" : ""
+        let hint = ""
+        let defaultValue = item.defaultValue
+        if(DataUtil.isNull(this.state[stateCode]) && !DataUtil.isNull(defaultValue)) {
+            this.state[stateCode] = defaultValue
+        }
         switch (item.name) {
             case "type":
-                let stateCodeName = stateCode + "Name"
+                let typeName = stateCode + "Name"
+                let parentCode = stateCode + "ParentCode"
+                let parentName = stateCode + "ParentName"
                 let opts = this.getOpts(item.code2Name)
                 return <Row align='middle'>
-                    <Col span={8} offset={2}>
+                    <Col span={8}>
                         <Text >类型{nameAppend}:</Text>
                     </Col>
-                    <Col span={12} offset={2}>
+                    <Col flex="auto" align="center">
                         <Select style={{ width: "150px" }}
                             value={this.state[stateCode]}
                             onChange={(value) => {
                                 this.setState({
                                     [stateCode]: value,
-                                    [stateCodeName]: item.code2Name[value]
+                                    [typeName]: item.code2Name[value][0],
+                                    [parentCode]: item.code2Name[value][1],
+                                    [parentName]: item.code2Name[value][2]
                                 })
                             }}>
                             {opts}
@@ -65,10 +77,10 @@ class InputWidget extends React.Component {
                 </Row>
             case "name":
                 return <Row align='middle' style={{ margin: "10px 0" }}>
-                    <Col span={8} offset={2}>
+                    <Col span={8} >
                         <Text >名称{nameAppend}:</Text>
                     </Col>
-                    <Col span={8} offset={2}>
+                    <Col flex="auto" align="center">
                         <Input placeholder='名称' style={{ width: "150px" }}
                             value={this.state[stateCode]}
                             onChange={(event) => {
@@ -81,15 +93,17 @@ class InputWidget extends React.Component {
             case "money":
             case "currentPrice":
             case "currentProfit":
+            case "sellProfit":
+            case "count":
                 let pon = item.moneyPon
-                let hint = item.hint ?? "金额"
+                hint = item.hint ?? "金额"
                 let ponKey = stateCode + "Pon"
-                this.state[ponKey] = item.moneyPon
+                this.state[ponKey] = pon
                 return <Row align='middle' style={{ margin: "10px 0" }}>
-                    <Col span={8} offset={2}>
+                    <Col span={8}>
                         <Text >{hint}{nameAppend}:</Text>
                     </Col>
-                    <Col span={12} offset={2}>
+                    <Col flex="auto" align="center">
                         <InputNumber style={{ width: "150px" }} addonBefore={pon ? "+" : "-"}
                             value={this.state[stateCode]}
                             onChange={(value) => {
@@ -105,13 +119,15 @@ class InputWidget extends React.Component {
                         this.state[stateCode] = new Date(item.inMonth)
                     }
                 }
-
+                hint = item.hint ?? "发生日期"
+                let picker = item.picker ?? ""
                 return <Row align='middle' style={{ margin: "10px 0" }}>
-                    <Col span={8} offset={2}>
-                        <Text >发生日期{nameAppend}:</Text>
+                    <Col span={8}>
+                        <Text >{hint}{nameAppend}:</Text>
                     </Col>
-                    <Col span={12} offset={2}>
+                    <Col flex="auto" align="center">
                         <DatePicker style={{ width: "150px" }}
+                            picker={picker}
                             value={moment(this.state[stateCode])}
                             onChange={(m, dateString) => {
                                 this.setState({ 
@@ -121,11 +137,12 @@ class InputWidget extends React.Component {
                     </Col>
                 </Row>
             case "desc":
+                hint = item.hint ?? "描述"
                 return <Row align='middle' style={{ margin: "10px 0" }}>
-                    <Col span={8} offset={2}>
-                        <Text >描述{nameAppend}:</Text>
+                    <Col span={8}>
+                        <Text >{hint}{nameAppend}:</Text>
                     </Col>
-                    <Col span={8} offset={2}>
+                    <Col flex="auto" align="center">
                         <Input placeholder='描述' style={{ width: "150px" }}
                             value={this.state[stateCode]}
                             onChange={(event) => {
@@ -154,7 +171,6 @@ class InputWidget extends React.Component {
                     throw new Error("发生日期仅可选在当前月份：" + item.inMonth)
                 }
             }
-            
             return true
         } catch (e) {
             console.warn(e)
@@ -179,9 +195,9 @@ class InputWidget extends React.Component {
             rows.push(this.itemToWidget(item))
         }
 
-        return (<Card title={this.props.title ?? "新增"} style={{ margin: "10px 20px" }}>
+        return (<Card title={this.props.title ?? "新增"} style={{ margin: "0px 5px"}} bodyStyle={{padding: "25px"}}>
             {rows}
-            <Row justify='center' style={{ margin: "15px 0" }}>
+            <Row justify='center' style={{ margin: "15px 0 0 0" }}>
                 <Col>
                     <Button type="primary" onClick={handleSubmit}> 提交 </Button>
                 </Col>

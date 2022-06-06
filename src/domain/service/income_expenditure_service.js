@@ -30,16 +30,13 @@ class IncomeExpenditureService {
      * 
      * @returns {Array[IncomeExpenditureDetail]}
      */
-    static queryMonth(month) {
-        let startDate = TimeUtil.monthStart(new Date(month))
+    static queryMonth(monthDate) {
+        let startDate = TimeUtil.monthStart(monthDate)
         return IncomeExpenditureDetail.queryTimeBetwen(startDate, TimeUtil.monthEnd(startDate))
     }
 
-    /**
-     * @param {IncomeExpenditureDetail} detail 
-     */
-    static delete(detail) {
-        IncomeExpenditureDetail.delete(detail.id)
+    static delete(id) {
+        IncomeExpenditureDetail.delete(id)
     }
 
 
