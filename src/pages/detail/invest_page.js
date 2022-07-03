@@ -9,7 +9,6 @@ const { Option } = Select;
 const { Header, Content, Sider } = Layout;
 const { Title, Paragraph, Text, Link } = Typography;
 
-//TODO 产品的总收益等等计算
 class InvestPage extends React.Component {
 
     constructor(props) {
@@ -21,7 +20,11 @@ class InvestPage extends React.Component {
             key: 'type',
             dataIndex: 'entity',
             render: (entity) => {
-                return <Tag color={"volcano"} key={entity.info.productType.code}>
+                let color = 'gold'
+                if (entity.info.productType.isStock()) {
+                    color = 'red'
+                }
+                return <Tag color={color} key={entity.info.productType.code}>
                     {entity.info.productType.name}
                 </Tag>
             },
@@ -33,6 +36,13 @@ class InvestPage extends React.Component {
                 return <Text>{entity.info.productName}</Text>
             },
         }, {
+            title: '最新时间',
+            key: 'happenTime',
+            dataIndex: 'entity',
+            render: (entity) => {
+                return <Text>{TimeUtil.dayStr(entity.currentPrice?.happenTime)}</Text>
+            },
+        }, {
             title: '投资总额',
             key: 'totalInvest',
             dataIndex: 'entity',
@@ -40,6 +50,30 @@ class InvestPage extends React.Component {
                 return <Text>{MoneyUtil.getStr(entity.buySells?.totalMoney)}</Text>
             },
             sorter: (a, b) => MoneyUtil.compare(a.entity.buySells?.totalMoney, b.entity.buySells?.totalMoney)
+        }, {
+            title: '账面利润率',
+            key: 'paperProfitPercent',
+            dataIndex: 'entity',
+            render: (entity) => {
+                let paperProfitPercent = this.getPagerProfitProcent(entity)
+                return <Text type={MoneyUtil.getPercentColorType(paperProfitPercent)}>
+                    {MoneyUtil.getPercentStr(paperProfitPercent)}</Text>
+            },
+            sorter: (a, b) => {
+                let apaperProfitPercent = this.getPagerProfitProcent(a.entity)
+                let bpaperProfitPercent = this.getPagerProfitProcent(b.entity)
+                return DataUtil.compare(apaperProfitPercent, bpaperProfitPercent)
+            }
+        }, {
+            title: '账面利润',
+            key: 'paperProfit',
+            dataIndex: 'entity',
+            render: (entity) => {
+                return <Text>{MoneyUtil.getStr(this.getPagerProfit(entity))}</Text>
+            },
+            sorter: (a, b) => {
+                return MoneyUtil.compare(this.getPagerProfit(a.entity), this.getPagerProfit(b.entity))
+            }
         }, {
             title: '最新价值',
             key: 'lastPrice',
@@ -49,45 +83,58 @@ class InvestPage extends React.Component {
             },
             sorter: (a, b) => MoneyUtil.compare(a.entity.currentPrice?.money, b.entity.currentPrice?.money)
         }, {
-            title: '账面利润',
-            key: 'totalProfit',
+            title: '卖出总额',
+            key: 'sellPrice',
             dataIndex: 'entity',
             render: (entity) => {
-                let ungetProfit = entity.currentPrice?.money - entity.buySells?.totalMoney
-                return <Text>{MoneyUtil.getStr(ungetProfit)}</Text>
+                return <Text>{MoneyUtil.getStr(Math.abs(entity.buySells?.totalSellMoney))}</Text>
+            },
+            sorter: (a, b) => MoneyUtil.compareAbs(a.entity.buySells?.totalSellMoney, b.entity.buySells?.totalSellMoney)
+        }, {
+            title: '卖出利润率',
+            key: 'sellProfitPercent',
+            dataIndex: 'entity',
+            render: (entity) => {
+                let sellProfitPercent = this.getSellProfitPercent(entity)
+                return <Text type={MoneyUtil.getPercentColorType(sellProfitPercent)}>
+                    {MoneyUtil.getPercentStr(sellProfitPercent)}</Text>
             },
             sorter: (a, b) => {
-                let aungetProfit = a.entity.currentPrice?.money - a.entity.buySells?.totalMoney
-                let bungetProfit = b.entity.currentPrice?.money - b.entity.buySells?.totalMoney
-                return MoneyUtil.compare(aungetProfit, bungetProfit)
+                let asellProfitPercent = this.getSellProfitPercent(a.entity)
+                let bsellProfitPercent = this.getSellProfitPercent(b.entity)
+                return DataUtil.compare(asellProfitPercent, bsellProfitPercent)
             }
         }, {
-            title: '份数',
-            key: 'totalCount',
+            title: '卖出利润',
+            key: 'sellProfit',
             dataIndex: 'entity',
             render: (entity) => {
-                return <Text>{entity.buySells?.totalCount}</Text>
+                return <Text>{MoneyUtil.getStr(entity.profits?.totalMoney)}</Text>
             },
+            sorter: (a, b) => {
+                return MoneyUtil.compare(a.entity.profits?.totalMoney, b.entity.profits?.totalMoney)
+            }
         }, {
             title: '成本价',
             key: 'costPricePerCount',
             dataIndex: 'entity',
             render: (entity) => {
-                return <Text>{MoneyUtil.getStr(MoneyUtil.safeDivision(entity.buySells?.totalMoney, entity.buySells.totalCount))}</Text>
+                return <Text>{MoneyUtil.getDetailStr(MoneyUtil.safeDivision(entity.buySells?.totalMoney, entity.buySells.totalCount))}</Text>
             },
         }, {
             title: '现价',
             key: 'currentPricePerCount',
             dataIndex: 'entity',
             render: (entity) => {
-                return <Text>{MoneyUtil.getStr(MoneyUtil.safeDivision(entity.currentPrice?.money, entity.buySells.totalCount))}</Text>
+                return <Text>{MoneyUtil.getDetailStr(MoneyUtil.safeDivision(entity.currentPrice?.money, entity.buySells.totalCount))}</Text>
             },
         }, {
-            title: '最新时间',
-            key: 'happenTime',
+            title: '份数',
+            key: 'totalCount',
             dataIndex: 'entity',
             render: (entity) => {
-                return <Text>{TimeUtil.dayStr(entity.currentPrice?.happenTime)}</Text>
+                var count = entity.buySells?.totalCount
+                return <Text>{Math.abs(count) == 0 ? "-" : Math.abs(count)}</Text>
             },
         },];
 
@@ -120,25 +167,34 @@ class InvestPage extends React.Component {
                 return <Text>{MoneyUtil.getStr(entity.profitMoney)}</Text>
             },
         }, {
+            title: '利润率',
+            key: 'profitPercent',
+            dataIndex: 'entity',
+            render: (entity) => {
+                let profitPercent = MoneyUtil.safeDivision(entity.profitMoney, Math.abs(entity.money))
+                return <Text type={MoneyUtil.getPercentColorType(profitPercent)}>
+                    {MoneyUtil.getPercentStr(profitPercent)}</Text>
+            },
+        }, {
             title: '份数',
             key: 'totalCount',
             dataIndex: 'entity',
             render: (entity) => {
-                return <Text>{Math.abs(entity.count)}</Text>
+                return <Text>{Math.abs(entity.count) == 0 ? "-" : Math.abs(entity.count)}</Text>
             },
         }, {
             title: '成本价',
             key: 'costPricePerCount',
             dataIndex: 'entity',
             render: (entity) => {
-                return <Text>{MoneyUtil.getStr(MoneyUtil.safeDivision(Math.abs(entity.money), Math.abs(entity.count)))}</Text>
+                return <Text>{MoneyUtil.getDetailStr(MoneyUtil.safeDivision(Math.abs(entity.money), Math.abs(entity.count)))}</Text>
             },
         }, {
             title: '卖出价',
             key: 'currentPricePerCount',
             dataIndex: 'entity',
             render: (entity) => {
-                return <Text>{MoneyUtil.getStr(
+                return <Text>{MoneyUtil.getDetailStr(
                     MoneyUtil.safeDivision(Math.abs(-1 * entity.money + entity.profitMoney), Math.abs(entity.count)))}</Text>
             },
         }, {
@@ -159,11 +215,13 @@ class InvestPage extends React.Component {
                 key: 'type',
                 dataIndex: 'entity',
                 render: (entity) => {
-                    let color = 'volcano'
+                    let color = 'gold'
                     if (entity.type?.isAsset()) {
                         color = 'geekblue'
                     } else if (entity.type?.isDebt()) {
                         color = 'green'
+                    } else if (entity.type?.isStock()) {
+                        color = 'red'
                     }
                     return <Tag color={color} key={entity.type?.code}>
                         {entity.type?.name}
@@ -175,13 +233,6 @@ class InvestPage extends React.Component {
                 dataIndex: 'entity',
                 render: (entity) => {
                     return <Text>{entity.name}</Text>
-                },
-            }, {
-                title: '定投额',
-                key: 'fixVote',
-                dataIndex: 'entity',
-                render: (entity) => {
-                    return <Text>{MoneyUtil.getStr(entity.fixVote)}</Text>
                 },
             }, {
                 title: '描述',
@@ -202,6 +253,92 @@ class InvestPage extends React.Component {
                 ),
             },
         ];
+
+        this.productFixVoteColumns = [
+            {
+                title: '类型',
+                key: 'type',
+                dataIndex: 'entity',
+                render: (entity) => {
+                    let color = 'gold'
+                    return <Tag color={color} key={entity.productTypeCode}>
+                        {entity.productTypeName}
+                    </Tag>
+                },
+            }, {
+                title: '名称',
+                key: 'name',
+                dataIndex: 'entity',
+                render: (entity) => {
+                    return <Text>{entity.productName}</Text>
+                },
+            }, {
+                title: '定投额',
+                key: 'fixVote',
+                dataIndex: 'entity',
+                render: (entity) => {
+                    return <Text>{MoneyUtil.getStr(entity.productFixVote)}</Text>
+                },
+            }, {
+                title: '账面利润率',
+                key: 'paperProfitPercent',
+                dataIndex: 'entity',
+                render: (entity) => {
+                    let paperProfitPercent = entity.paperProfitPercent
+                    return <Text type={MoneyUtil.getPercentColorType(paperProfitPercent)}>
+                        {MoneyUtil.getPercentStr(paperProfitPercent)}</Text>
+                },
+                sorter: (a, b) => {
+                    let apaperProfitPercent = a.entity.paperProfitPercent
+                    let bpaperProfitPercent = b.entity.paperProfitPercent
+                    return DataUtil.compare(apaperProfitPercent, bpaperProfitPercent)
+                }
+            }, {
+                title: '卖出利润率',
+                key: 'sellProfitPercent',
+                dataIndex: 'entity',
+                render: (entity) => {
+                    let sellProfitPercent = entity.sellProfitPercent
+                    return <Text type={MoneyUtil.getPercentColorType(sellProfitPercent)}>
+                        {MoneyUtil.getPercentStr(sellProfitPercent)}</Text>
+                },
+                sorter: (a, b) => {
+                    let asellProfitPercent = a.entity.sellProfitPercent
+                    let bsellProfitPercent = b.entity.sellProfitPercent
+                    return DataUtil.compare(asellProfitPercent, bsellProfitPercent)
+                }
+            }, {
+                title: '描述',
+                key: 'desc',
+                dataIndex: 'entity',
+                render: (entity) => {
+                    return <Text>{entity.product?.desc}</Text>
+                },
+            },
+            {
+                title: '操作',
+                key: 'action',
+                render: (_, record) => {
+                    if(!DataUtil.isNull(record.entity.product)) {
+                        return <Space size="middle">
+                            <a onClick={() => { this.showEditProductDialog(record.entity.product) }}>编辑</a>
+                            <a onClick={() => { this.deleteProduct(record.entity.product) }}>删除</a>
+                        </Space>
+                    }
+                },
+            }];
+    }
+
+    getPagerProfit(entity) {
+        return entity.currentPrice?.money - entity.buySells?.totalMoney
+    }
+
+    getPagerProfitProcent(entity) {
+        return MoneyUtil.safeDivision(this.getPagerProfit(entity), entity.buySells?.totalMoney)
+    }
+
+    getSellProfitPercent(entity) {
+        return MoneyUtil.safeDivision(entity.profits?.totalMoney, Math.abs(entity.buySells?.totalSellMoney))
     }
 
     showEditProductDialog(detail) {
@@ -250,14 +387,7 @@ class InvestPage extends React.Component {
 
     queryAllInvestData() {
         let map = InvestmentService.getAllInvestDetailBefore(null)
-        this._processInvestData(map.invest)
         return map
-    }
-
-    _processInvestData(details) {
-        for (let productId of Object.keys(details)) {
-            let detail = details[productId]
-        }
     }
 
     render() {
@@ -266,21 +396,69 @@ class InvestPage extends React.Component {
         InvestmentService.getProductTypes().forEach(type => {
             code2Name[type.code] = [type.name]
         })
-        let productData = []
+        let productAssetDatas = []
+        let productStockDatas = []
+        let productInvestDatas = []
+        let productIdToProduct = {}
         InvestmentService.queryProducts().sort((a, b) => Math.abs(a.type.code) < Math.abs(b.type.code) ? 1 : -1).forEach(entity => {
-            productData.push({ key: entity.id, entity: entity })
+            if(entity.type.isAsset() || entity.type.isDebt()) {
+                productAssetDatas.push({ key: entity.id, entity: entity })
+            } else if (entity.type.isStock()) {
+                productStockDatas.push({ key: entity.id, entity: entity })
+            } else {
+                productInvestDatas.push({ key: entity.id, entity: entity })
+            }
+            productIdToProduct[entity.id] = entity
         })
 
         let investMap = this.queryAllInvestData()
 
         let investDatas = []
+        let stockDatas = []
+        let investFixVoteDatas = []
+        var totalFixVote = {
+            productTypeCode: 99999999,
+            productTypeName: "汇总",
+            productName: "汇总",
+            productFixVote: 0,
+            paperProfit: 0,
+            sellProfit: 0,
+            paperProfitPercent: 0,
+            sellProfitPercent: 0,
+        }
         for (let productId of Object.keys(investMap.invest)) {
             let detail = investMap.invest[productId]
             investDatas.push({ key: productId, entity: detail })
+
+            var product = productIdToProduct[productId]
+            var paperProfitPercent = this.getPagerProfitProcent(detail)
+            var sellProfitPercent = this.getSellProfitPercent(detail)
+            var fixVoteEntity = {
+                product: product,
+                productTypeCode: product.type.code,
+                productTypeName: product.type.name,
+                productName: product.name,
+                productFixVote: product.fixVote,
+                paperProfit: product.fixVote * paperProfitPercent,
+                sellProfit: product.fixVote * sellProfitPercent,
+                paperProfitPercent: paperProfitPercent,
+                sellProfitPercent: sellProfitPercent,
+            }
+            totalFixVote.productFixVote += fixVoteEntity.productFixVote
+            totalFixVote.paperProfit += fixVoteEntity.paperProfit
+            totalFixVote.sellProfit += fixVoteEntity.sellProfit
+            investFixVoteDatas.push({key: productId, entity: fixVoteEntity})
+        }
+        totalFixVote.paperProfitPercent = totalFixVote.paperProfit / totalFixVote.productFixVote
+        totalFixVote.sellProfitPercent = totalFixVote.sellProfit / totalFixVote.productFixVote
+        investFixVoteDatas.push({key: 9999999, entity: totalFixVote})
+
+        for (let productId of Object.keys(investMap.stock)) {
+            let detail = investMap.stock[productId]
+            stockDatas.push({ key: productId, entity: detail })
         }
         let subInvestRowRender = (record, index) => {
             const data = [];
-            console.log(record.entity)
             record.entity.buySells.datas.forEach(ele => {
                 for (let profit of record.entity.profits?.datas ?? []) {
                     if (profit.buySellId === ele.id) {
@@ -300,10 +478,16 @@ class InvestPage extends React.Component {
         }
         return (
             <Content className='Content'>
+                <Divider orientation="center">投资详情</Divider>
+                <Table columns={this.investColumns} dataSource={stockDatas} expandable={{
+                    expandedRowRender: subInvestRowRender,
+                    rowExpandable: subInvestRowExpandable
+                }} pagination={{pageSize: 20}} scroll={{ x: 1500 }} sortDirections={['descend']}/>
                 <Table columns={this.investColumns} dataSource={investDatas} expandable={{
                     expandedRowRender: subInvestRowRender,
                     rowExpandable: subInvestRowExpandable
-                }} pagination={{pageSize: 20}} scroll={{ x: 1400 }} sortDirections={['descend']}/>
+                }} pagination={{pageSize: 20}} scroll={{ x: 1500 }} sortDirections={['descend']}/>
+                <Divider orientation="center">投资产品</Divider>
                 <Row style={{ padding: '10px 5px', backgroundColor: "#eee" }}>
                     <Col span={8}>
                         <InputWidget title={"新增投资产品"} cfgs={[{
@@ -322,7 +506,10 @@ class InvestPage extends React.Component {
                         }} />
                     </Col>
                     <Col span={16}>
-                        <Table columns={this.productColumns} dataSource={productData} pagination={{pageSize: 20}}/>
+                        <Table columns={this.productColumns} dataSource={productStockDatas} pagination={{pageSize: 10}}/>
+                        <Table columns={this.productFixVoteColumns} dataSource={investFixVoteDatas} 
+                            pagination={{pageSize: 15}} scroll={{ x: 1000 }} sortDirections={['descend']}/>
+                        <Table columns={this.productColumns} dataSource={productAssetDatas} pagination={{pageSize: 10}}/>
                     </Col>
                 </Row>
                 <CusDialog title="修改产品" visible={this.state.showDialog === "editProduct"}

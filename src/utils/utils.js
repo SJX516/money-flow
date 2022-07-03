@@ -1,6 +1,10 @@
 class MoneyUtil {
-    static getStr(money) {
-        if(DataUtil.isEmpty(money) || DataUtil.notNumber(money) || money == 0) {
+    static noValue(money) {
+        return DataUtil.isEmpty(money) || DataUtil.notNumber(money) || money == 0
+    }
+
+    static getDetailStr(money) {
+        if(this.noValue(money)) {
             return "-"
         }
         let temp = money / 100
@@ -8,6 +12,51 @@ class MoneyUtil {
             return `￥${temp}`
         } else {
             return `￥${temp.toFixed(2)}`
+        }
+    }
+
+    static getStr(money) {
+        if(this.noValue(money)) {
+            return "-"
+        }
+        let temp = money / 100
+        return `￥${this.getFixedMoney(temp)}`
+    }
+
+    static getMoneyColorType(money) {
+        if(this.noValue(money)) {
+            return ""
+        }
+        if(money > 0) {
+            return "danger"
+        } else if(money < 0) {
+            return "success"
+        } else {
+            return ""
+        }
+    }
+
+    // 1234567 -> 1,234,567
+    static getFixedMoney(money) {
+        var negMoney = money < 0
+        var str = money.toFixed()
+        if(negMoney) {
+            str = str.substr(1)
+        }
+        var l = str.length
+        var strArr = []
+        for(var i = 0; i < l; ) {
+            var count = i == 0 ? l % 3 : 3
+            if(count == 0) {
+                count = 3
+            }
+            strArr.push(str.substr(i, count))
+            i += count
+        }
+        if(negMoney) {
+            return "-" + strArr.join(",")
+        } else {
+            return strArr.join(",")
         }
     }
 
@@ -20,12 +69,42 @@ class MoneyUtil {
         return money1 - money2
     }
 
+    static compareAbs(money1, money2) {
+        if(DataUtil.notNumber(money1)) {
+            return -1
+        } else if (DataUtil.notNumber(money2)) {
+            return 1
+        }
+        return Math.abs(money1) - Math.abs(money2)
+    }
+
     // a / b
     static safeDivision(a, b) {
         if(DataUtil.notNumber(a) || DataUtil.notNumber(b) || b == 0) {
             return null
         } else {
             return a / b
+        }
+    }
+
+    static getPercentStr(percent) {
+        if(DataUtil.notNumber(percent) || Math.abs(percent) <= 0.0001) {
+            return "-"
+        } else {
+            return DataUtil.getPercent(percent)
+        }
+    }
+
+    static getPercentColorType(percent) {
+        if(DataUtil.notNumber(percent) || Math.abs(percent) <= 0.0001) {
+            return ""
+        }
+        if(percent > 0) {
+            return "danger"
+        } else if(percent < 0) {
+            return "success"
+        } else {
+            return ""
         }
     }
 }
@@ -50,6 +129,24 @@ class DataUtil {
         } else {
             return `${temp.toFixed(2)}%`
         }
+    }
+
+    static compare(a, b) {
+        if(DataUtil.notNumber(a)) {
+            return -1
+        } else if (DataUtil.notNumber(b)) {
+            return 1
+        }
+        return a - b
+    }
+
+    static compareAbs(a, b) {
+        if(DataUtil.notNumber(a)) {
+            return -1
+        } else if (DataUtil.notNumber(b)) {
+            return 1
+        }
+        return Math.abs(a) - Math.abs(b)
     }
 }
 

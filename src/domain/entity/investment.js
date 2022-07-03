@@ -152,6 +152,10 @@ class InvestmentType {
     isDebt() {
         return this === InvestmentType.Product.debt
     }
+
+    isStock() {
+        return this === InvestmentType.Product.stock
+    }
 }
 
 export {InvestmentProduct, InvestmentType, InvestmentRecordType, InvestmentDetail}

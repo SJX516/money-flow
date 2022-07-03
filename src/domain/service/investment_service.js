@@ -44,6 +44,7 @@ class InvestmentService {
         var details = InvestmentDetail.queryTimeBetwen(null, null, null, endTime)
         let investMap = {
             invest: {},
+            stock: {},
             asset: {},
             debt: {}
         }
@@ -72,6 +73,11 @@ class InvestmentService {
                     }
                 }
             },
+            stock: {
+                "11": {
+
+                }
+            }
             asset: {                
                 "2": {
                     "currentPrice": InvestmentDetail,
@@ -99,6 +105,8 @@ class InvestmentService {
             currentProductMap = investMap.asset
         } else if (detail.productType.isDebt()) {
             currentProductMap = investMap.debt
+        } else if (detail.productType.isStock()) {
+            currentProductMap = investMap.stock
         } else {
             currentProductMap = investMap.invest
         }
@@ -126,6 +134,7 @@ class InvestmentService {
             if (DataUtil.isNull(currentProductMap.buySells)) {
                 currentProductMap.buySells = {
                     totalMoney: 0,
+                    totalSellMoney: 0,
                     totalCount: 0,
                     datas: [],
                 }
@@ -134,6 +143,9 @@ class InvestmentService {
                 currentProductMap.buySells.totalCount += detail.count
             }
             currentProductMap.buySells.totalMoney += detail.money
+            if(detail.money < 0) {
+                currentProductMap.buySells.totalSellMoney += detail.money
+            }
             currentProductMap.buySells.datas.push(detail)
         }
         return investMap
