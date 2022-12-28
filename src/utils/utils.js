@@ -174,6 +174,16 @@ class TimeUtil {
         return new Date(`${year}-${month}-01 00:00:00`)
     }
 
+    static nextYearStart(time1) {
+        let month = time1.getMonth() + 1;
+        let year = time1.getFullYear() + 1;
+        return new Date(`${year}-${month}-01 00:00:00`)
+    }
+
+    static yearEnd(time1) {
+        return new Date(this.nextYearStart(time1) - 1)
+    }
+
     static lastMonthEnd(time1) {
         return new Date(this.monthStart(time1) - 1)
     }

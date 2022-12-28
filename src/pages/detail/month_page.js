@@ -6,6 +6,7 @@ import { DataUtil, MoneyUtil, TimeUtil } from '../../utils/utils';
 import InputWidget from './widget/input_widget';
 import InvestmentService from '../../domain/service/investment_service';
 import { InvestmentRecordType, InvestmentType } from '../../domain/entity/investment';
+import { IncomeExpenditureVMService } from '../../domain/service/view_model_service';
 
 const { Option } = Select;
 const { Header, Content, Sider } = Layout;
@@ -162,7 +163,7 @@ class MonthPage extends React.Component {
                 return <Text>{MoneyUtil.getStr(this.getCurrentMonthPagerProfit(entity))}</Text>
             },
             sorter: (a, b) => {
-                return MoneyUtil.compare(this.getCurrentMonthPagerProfit(a.entity), this.getCurrentMonthPagerProfit(a.entity))
+                return MoneyUtil.compare(this.getCurrentMonthPagerProfit(a.entity), this.getCurrentMonthPagerProfit(b.entity))
             }
         }, {
             title: '当月账面利润率',
@@ -602,19 +603,6 @@ class MonthPage extends React.Component {
         )
     }
 
-    /**
-     * @param {IncomeExpenditureDetail} detail 
-     */
-    newEntityFromDetail(detail) {
-        return {
-            id: detail.id,
-            happenTime: detail.happenTime,
-            title: detail.type.name,
-            money: detail.money,
-            desc: detail.desc,
-        }
-    }
-
     newEntity(happenTime, title, money, desc, child=[]) {
         return {
             happenTime: happenTime,
@@ -685,17 +673,8 @@ class MonthPage extends React.Component {
         })
         //处理收支数据
         let incomeExpendData = []
-        let totalIncome = 0, totalExpend = 0
-        let incomeEntitys = [], expendEntitys = []
-        this.queryData(currentMonthDate).sort((a, b) => Math.abs(a.type.code) > Math.abs(b.type.code) ? 1 : -1).forEach(detail => {
-            if (detail.type.code > 0) {
-                incomeEntitys.push(this.newEntityFromDetail(detail))
-                totalIncome += detail.money
-            } else {
-                expendEntitys.push(this.newEntityFromDetail(detail))
-                totalExpend += detail.money
-            }
-        })
+        let monthData = IncomeExpenditureVMService.queryMonthData(currentMonthDate)
+        let totalIncome = monthData['income']['total'], totalExpend = monthData['expend']['total']
 
         //处理资产、负债、投资的一些总数据
         let investMap = this.queryAllInvestDataBefore(currentMonthDate)
@@ -712,10 +691,10 @@ class MonthPage extends React.Component {
             + totalInvestMoneys[1] + totalStockMoneys[1] + totalDebtMoneys[1]
         let totalPassiveMoney = totalAssetMoneys[1] + totalInvestMoneys[1] + totalStockMoneys[1]
 
-        incomeExpendData.push({key: "主动收入", entity: this.newEntity(null, "主动收入", totalIncome, null, incomeEntitys)})    
+        incomeExpendData.push({key: "主动收入", entity: this.newEntity(null, "主动收入", totalIncome, null, monthData['income']['details'])})    
         incomeExpendData.push({key: "被动收入", entity: this.newEntity(null, "被动收入", totalPassiveMoney, 
             null, passiveIncomeEntitys)})
-        incomeExpendData.push({key: "主动支出", entity: this.newEntity(null, "主动支出", totalExpend, null, expendEntitys)})
+        incomeExpendData.push({key: "主动支出", entity: this.newEntity(null, "主动支出", totalExpend, null, monthData['expend']['details'])})
         incomeExpendData.push({key: "被动支出", entity: this.newEntity(null, "被动支出", totalDebtMoneys[1], 
             null, passiveExpendEntitys)})
         incomeExpendData.push({key: "新增现金", entity: this.newEntity(null, "新增现金", currentMonthAddMoney, 

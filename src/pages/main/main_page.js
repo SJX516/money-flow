@@ -8,6 +8,9 @@ import InitPage from '../detail/init_page'
 import { SummaryService } from '../../domain/service/summary_service';
 import InputWidget from '../detail/widget/input_widget';
 import { CusDialog } from '../detail/widget/cus_dialog';
+import YearPage from '../detail/year_page';
+import { App, DB_INIT } from '../..';
+import TestPage from './test_page';
 
 const { Header, Content, Sider } = Layout;
 
@@ -15,22 +18,22 @@ class MainPage extends React.Component {
 
     constructor(props) {
         super(props)
-        this.navItems = ['init', 'by_month', 'invest_detail', 'todo'].map((key) => {
-            switch (key) {
-                case 'init':
-                    return { key, label: "数据初始化" }
-                case 'by_month':
-                    return { key, label: "按月展示" }
-                case 'invest_detail':
-                    return { key, label: "投资详情" }
-                default:
-                    return { key, label: "TODO" }
-            }
+        let items = {
+            'init': "数据初始化",
+            'by_month': "按月展示",
+            'by_year': "按年展示",
+            'invest_detail': "投资详情",
+            'todo': "TODO",
+        }
+        if(!App.isProduction()) {
+            items['test'] = '测试页面'
+        }
+        this.navItems = Object.keys(items).map((key) => {
+            return { key, label: items[key] }
         });
         this.state = {
             navKey: "init",
         }
-
     }
 
     refreshPage() {
@@ -87,18 +90,23 @@ class MainPage extends React.Component {
         let topRightBtns = []
         let subPage = null
         let openKeys = []
-        if (navKey === 'init' || this.state.dbReady !== true) {
+        if (navKey === 'init' || DB_INIT !== true) {
             if(navKey !== 'init') {
                 this.state.navKey = "init"
                 message.error('请先加载DB')
             }
             subPage = <InitPage onDbReady={() => {
-                this.state.dbReady = true
-                this.state.navKey = "by_month"
+                if(App.isProduction()) {
+                    this.state.navKey = "by_month"
+                } else {
+                    this.state.navKey = "test"
+                }
                 this.refreshPage()
             }} />
         } else {
-            if (navKey === 'by_month') {
+            if (navKey === 'test') {
+                subPage = <TestPage />
+            } else if (navKey === 'by_month') {
                 let sideDatas = this.getByMonthSideDatas()
                 let lastMonth = null
                 siderItems = Object.keys(sideDatas).sort((a, b) => b > a ? 1 : -1).map((year, i) => {
@@ -120,6 +128,8 @@ class MainPage extends React.Component {
                 }
                 topRightBtns.push(<Button onClick={() => this.showAddNewMonthDialog()}>新加月份</Button>)
                 subPage = <MonthPage month={this.state.sideKey} />
+            } else if (navKey === 'by_year') {
+                subPage = <YearPage />
             } else if (navKey === 'invest_detail') {
                 subPage = <InvestPage />
             } else {

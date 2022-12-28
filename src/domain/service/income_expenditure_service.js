@@ -35,11 +35,13 @@ class IncomeExpenditureService {
         return IncomeExpenditureDetail.queryTimeBetwen(startDate, TimeUtil.monthEnd(startDate))
     }
 
+    static queryTimeBetwen(startDate, endDate) {
+        return IncomeExpenditureDetail.queryTimeBetwen(startDate, endDate)
+    }
+
     static delete(id) {
         IncomeExpenditureDetail.delete(id)
     }
-
-
 }
 
 export {IncomeExpenditureService}

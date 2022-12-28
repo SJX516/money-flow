@@ -34,7 +34,7 @@ class InitPage extends React.Component {
     render() {
         return (
             <Content className='Content'>
-                <Divider orientation="center">版本：1.0.20220703</Divider>
+                <Divider orientation="center">版本：{App.getVersion()}</Divider>
                 <Row style={{ padding: '10px 50px 50px', backgroundColor: "#eee" }}>
                     <Col span={12} align='center'>
                         <Divider orientation="center">加载DB文件</Divider>
