@@ -5,7 +5,7 @@ import { IncomeExpenditureService } from '../../domain/service/income_expenditur
 import { App } from '../..'
 import { IncomeExpenditureType } from '../../domain/entity/income_expenditure'
 import { Content } from 'antd/lib/layout/layout'
-import { IncomeExpenditureVMService } from '../../domain/service/view_model_service'
+import { IncomeExpenditureVMService, InvestmentVMService } from '../../domain/service/view_model_service'
 import { MoneyUtil } from '../../utils/utils'
 
 const { Title, Paragraph, Text, Link } = Typography
@@ -120,9 +120,69 @@ class TestPage extends React.Component {
 		this._expect(yearData01['expend']['sumByMonth'].length, 4)
 	}
 
+	_testInvestData() {
+		/**
+		 * 	2022-10
+		 *  totalAssetMoneys (3) [17330631, 7500, 0]
+			totalDebtMoneys (3) [-894467, -850000, 0]
+			totalInvestMoneys (3) [50981840, 0, 57218750]
+			totalStockMoneys (3) [21153610, 28250, 24719638]
+			lastMonthTotalMoney 97684540
+			currentMonthTotalMoney 98374552
+			currentMonthAddMoney 636405
+			totalPassiveMoney 35750
+			
+			2022-11
+			totalAssetMoneys (3) [16241803, 2650, 0]
+			totalDebtMoneys (3) [-6000, -1500000, 0]
+ 			totalInvestMoneys (3) [54335438, 0, 58088750]
+			totalStockMoneys (3) [21522750, -20, 24677398]
+			lastMonthTotalMoney 98374552
+			currentMonthTotalMoney 99001951
+			currentMonthAddMoney 682795
+			totalPassiveMoney 2630
+		 */
+		this.group = '_testInvestData'
+
+		let monthData1 = InvestmentVMService.queryMonthData(new Date('2022-10'))
+		this._expect(monthData1['asset']['totalMoneys'][0], 17330631)
+		this._expect(monthData1['asset']['totalProfitMoneys'][1], 7500)
+		this._expect(monthData1['asset']['totalMoneys'][1], 0)
+
+		this._expect(monthData1['debt']['totalMoneys'][0], -894467)
+		this._expect(monthData1['debt']['totalProfitMoneys'][1], -850000)
+		this._expect(monthData1['debt']['totalMoneys'][1], 0)
+
+		this._expect(monthData1['fund']['totalMoneys'][0], 50981840)
+		this._expect(monthData1['fund']['totalProfitMoneys'][1], 0)
+		this._expect(monthData1['fund']['totalMoneys'][1], 57218750)
+
+		this._expect(monthData1['stock']['totalMoneys'][0], 21153610)
+		this._expect(monthData1['stock']['totalProfitMoneys'][1], 28250)
+		this._expect(monthData1['stock']['totalMoneys'][1], 24719638)
+
+		let monthData2 = InvestmentVMService.queryMonthData(new Date('2022-11'))
+		this._expect(monthData2['asset']['totalMoneys'][0], 16241803)
+		this._expect(monthData2['asset']['totalProfitMoneys'][1], 2650)
+		this._expect(monthData2['asset']['totalMoneys'][1], 0)
+
+		this._expect(monthData2['debt']['totalMoneys'][0], -6000)
+		this._expect(monthData2['debt']['totalProfitMoneys'][1], -1500000)
+		this._expect(monthData2['debt']['totalMoneys'][1], 0)
+
+		this._expect(monthData2['fund']['totalMoneys'][0], 54335438)
+		this._expect(monthData2['fund']['totalProfitMoneys'][1], 0)
+		this._expect(monthData2['fund']['totalMoneys'][1], 58088750)
+
+		this._expect(monthData2['stock']['totalMoneys'][0], 21522750)
+		this._expect(monthData2['stock']['totalProfitMoneys'][1], -20)
+		this._expect(monthData2['stock']['totalMoneys'][1], 24677398)
+	}
+
 	testAll() {
 		this.testResults = []
 		this._testIncomeExpend()
+		this._testInvestData()
 		this.refreshPage()
 	}
 

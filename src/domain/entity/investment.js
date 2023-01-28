@@ -156,6 +156,11 @@ class InvestmentType {
     isStock() {
         return this === InvestmentType.Product.stock
     }
+
+    isFund() {
+        return this === InvestmentType.Product.stock_fund || 
+            this === InvestmentType.Product.etf || this === InvestmentType.Product.bond
+    }
 }
 
 export {InvestmentProduct, InvestmentType, InvestmentRecordType, InvestmentDetail}

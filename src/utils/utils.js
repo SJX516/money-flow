@@ -191,7 +191,11 @@ class TimeUtil {
     static inMonth(time1, monthTime) {
         let currentMonthStart = TimeUtil.monthStart(monthTime)
         let currentMonthEnd = TimeUtil.monthEnd(monthTime)
-        if (time1 > currentMonthEnd || time1 < currentMonthStart) {
+        return this.inTime(time1, currentMonthStart, currentMonthEnd)
+    }
+
+    static inTime(time1, startTime, endTime) {
+        if (time1 > endTime || time1 < startTime) {
             return false
         } else {
             return true
@@ -206,6 +210,9 @@ class TimeUtil {
     }
 
     static monthStr(time1) {
+        if(DataUtil.isNull(time1)) {
+            return ""
+        }
         return time1.timeStr().substring(0, 7)
     }
 

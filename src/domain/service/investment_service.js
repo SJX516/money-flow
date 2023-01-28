@@ -43,7 +43,7 @@ class InvestmentService {
     static getAllInvestDetailBefore(endTime) {
         var details = InvestmentDetail.queryTimeBetwen(null, null, null, endTime)
         let investMap = {
-            invest: {},
+            fund: {},
             stock: {},
             asset: {},
             debt: {}
@@ -108,7 +108,7 @@ class InvestmentService {
         } else if (detail.productType.isStock()) {
             currentProductMap = investMap.stock
         } else {
-            currentProductMap = investMap.invest
+            currentProductMap = investMap.fund
         }
         if (DataUtil.isNull(currentProductMap[detail.productId])) {
             currentProductMap[detail.productId] = {}

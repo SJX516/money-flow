@@ -1,10 +1,12 @@
 import initSqlJs from "sql.js";
 /* eslint import/no-webpack-loader-syntax: off */
 import sqlWasm from "!!file-loader?name=sql-wasm-[contenthash].wasm!sql.js/dist/sql-wasm.wasm";
+import { message } from "antd";
 
 class DBHelper {
     constructor() {
         this.db = null;
+        this.actionCount = 0
     }
 
     async init(file) {
@@ -18,12 +20,66 @@ class DBHelper {
         this.db = new SQL.Database(Uints);
     }
 
+    async createDb() {
+        let SQL = await initSqlJs({ locateFile: () => sqlWasm });
+        this.db = new SQL.Database();
+        this.create("CREATE TABLE `data_summary` (\
+            `id` INTEGER NOT NULL  ,\
+            `gmt_create` datetime NOT NULL  ,\
+            `gmt_modified` datetime NOT NULL  ,\
+            `type` varchar(64) NOT NULL ,\
+            `time` datetime NOT NULL  ,\
+            `money` INTEGER,\
+            PRIMARY KEY (`id` AUTOINCREMENT)\
+           )")
+        this.create("CREATE TABLE `income_expenditure_detail` (\
+            `id` INTEGER NOT NULL ,\
+            `gmt_create` datetime NOT NULL,\
+            `gmt_modified` datetime NOT NULL ,\
+            `type` int NOT NULL,\
+            `desc` varchar(64) NULL,\
+            `money` bigint unsigned NOT NULL,\
+            `happen_time` datetime NOT NULL,\
+            PRIMARY KEY (`id` AUTOINCREMENT)\
+        )")
+        this.create("CREATE TABLE `investment_detail` (\
+            `id` INTEGER NOT NULL  ,\
+            `gmt_create` datetime NOT NULL  ,\
+            `gmt_modified` datetime NOT NULL  ,\
+            `product_id` INTEGER NOT NULL  ,\
+            `product_name` varchar(64) NOT NULL  ,\
+            `product_type` INTEGER NOT NULL  ,\
+            `money` INTEGER NOT NULL  ,\
+            `happen_time` datetime NOT NULL  ,\
+            `buy_sell_id` INTEGER,\
+            `record_type` int NOT NULL , `count` INT,\
+            PRIMARY KEY (`id` AUTOINCREMENT)\
+           )")
+        this.create("CREATE TABLE `investment_product` (\
+            `id` INTEGER NOT NULL  ,\
+            `gmt_create` datetime NOT NULL  ,\
+            `gmt_modified` datetime NOT NULL  ,\
+            `name` varchar(64) NOT NULL  ,\
+            `type` int NOT NULL  ,\
+            `desc` varchar(64) NULL  , fix_vote INT,\
+            PRIMARY KEY (`id` AUTOINCREMENT)\
+           )")
+    }
+
     export() {
         const data = this.db.export();
         const buffer = Buffer.from(data);
         var blob = new Blob([buffer]);
         var url = window.URL.createObjectURL(blob);
         this.downloadFile(url)
+    }
+
+    checkAutoSave() {
+        if(++this.actionCount > 20) {
+            message.info("自动触发保存")
+            this.actionCount = 0
+            this.export()
+        }
     }
 
     downloadFile(url) {
@@ -54,9 +110,14 @@ class DBHelper {
         if (orders.length > 0) {
             sql += ` order by ${orders.join(',')}`
         }
-        console.log(sql + " " + JSON.stringify(valueDict))
+        // console.log(sql + " " + JSON.stringify(valueDict))
         let content = this.db.exec(sql, valueDict)
         return content
+    }
+
+    create(sql) {
+        console.log(sql)
+        this.db.run(sql)
     }
 
     insert(tablename, cols, values) {
@@ -72,6 +133,7 @@ class DBHelper {
         sql += ") returning id"
         console.log(sql + " " + JSON.stringify(valueDict))
         var content = this.db.exec(sql, valueDict);
+        this.checkAutoSave()
         return content[0].values[0][0]
     }
 
@@ -83,6 +145,7 @@ class DBHelper {
         sql += " where id=$id"
         valueDict['$id'] = id
         console.log(sql + " " + JSON.stringify(valueDict))
+        this.checkAutoSave()
         this.db.run(sql, valueDict);
     }
 
@@ -97,6 +160,7 @@ class DBHelper {
         sql += data[0]
         console.log(sql + " " + JSON.stringify(valueDict))
         let content = this.db.exec(sql, valueDict)
+        this.checkAutoSave()
         console.log(JSON.stringify(content))
     }
 

@@ -9,7 +9,6 @@ class CusDialog extends React.Component {
         this.state = {}
     }
 
-
     render() {
         let title = this.props.title
         let visible = this.props.visible

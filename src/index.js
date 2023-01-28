@@ -40,6 +40,12 @@ class App {
         await this.db.init(file)
         DB_INIT = true
     }
+
+    static async createDb() {
+        this.db = new DBHelper()
+        await this.db.createDb()
+        DB_INIT = true
+    }
 }
 
 ReactDOM.render(<ConfigProvider locale={zhCN}>

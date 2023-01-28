@@ -426,8 +426,8 @@ class InvestPage extends React.Component {
             paperProfitPercent: 0,
             sellProfitPercent: 0,
         }
-        for (let productId of Object.keys(investMap.invest)) {
-            let detail = investMap.invest[productId]
+        for (let productId of Object.keys(investMap.fund)) {
+            let detail = investMap.fund[productId]
             investDatas.push({ key: productId, entity: detail })
 
             var product = productIdToProduct[productId]

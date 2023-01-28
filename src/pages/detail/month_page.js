@@ -1,12 +1,15 @@
 import React from 'react'
-import { Table, Tag, Button, Layout, Input, Select, Space, Card, InputNumber, Row, Col, Divider, DatePicker, Popover, Typography, message, List } from "antd"
+import { Table, Tag, Button, Layout, Input, Select, Space, Card, InputNumber, Row, Col, Divider, DatePicker, Popover, Typography, message, List, Breadcrumb, Menu } from "antd"
 import { IncomeExpenditureService } from '../../domain/service/income_expenditure_service'
 import { IncomeExpenditureDetail, IncomeExpenditureType } from '../../domain/entity/income_expenditure'
 import { DataUtil, MoneyUtil, TimeUtil } from '../../utils/utils';
 import InputWidget from './widget/input_widget';
 import InvestmentService from '../../domain/service/investment_service';
 import { InvestmentRecordType, InvestmentType } from '../../domain/entity/investment';
-import { IncomeExpenditureVMService } from '../../domain/service/view_model_service';
+import { IncomeExpenditureVMService, InvestmentVMService } from '../../domain/service/view_model_service';
+import { UIUtils } from '../ui_utils';
+import { SummaryService } from '../../domain/service/summary_service';
+import { CusDialog } from './widget/cus_dialog';
 
 const { Option } = Select;
 const { Header, Content, Sider } = Layout;
@@ -84,18 +87,80 @@ class MonthPage extends React.Component {
             }   
         },]
 
+        this.assetDebtColumns = [{
+            title: '类型',
+            key: 'type',
+            dataIndex: 'entity',
+            render: (entity) => {
+                return UIUtils.getProductTag(entity.info.productType)
+            },
+        }, {
+            title: '名称',
+            key: 'name',
+            dataIndex: 'entity',
+            render: (entity) => {
+                return <Text>{entity.info.productName}</Text>
+            },
+        },  {
+            title: '最新时间',
+            key: 'happenTime',
+            dataIndex: 'entity',
+            render: (entity) => {
+                let type = ""
+                if (!TimeUtil.inMonth(entity.currentPrice?.happenTime, this.monthDate)) {
+                    type = "secondary"
+                }
+                return <Text type={type}>{TimeUtil.dayStr(entity.currentPrice?.happenTime)}</Text>
+            },
+        }, {
+            title: '总额',
+            key: 'currentPrice',
+            dataIndex: 'entity',
+            render: (entity) => {
+                return <Text>{MoneyUtil.getStr(entity.currentPrice?.money)}</Text>
+            },
+            sorter: (a, b) => MoneyUtil.compare(a.entity.currentPrice?.money, b.entity.currentPrice?.money)
+        }, {
+            title: '到账利润',
+            key: 'currentMonthProfit',
+            dataIndex: 'entity',
+            render: (entity) => {
+                return <Text>{MoneyUtil.getStr(entity.profits?.filterTotalMoney)}</Text>
+            },
+            sorter: (a, b) => MoneyUtil.compare(a.entity.profits?.filterTotalMoney, b.entity.profits?.filterTotalMoney)
+        }]
+        this.subAssetDebtColumns = [{
+            title: '发生时间',
+            key: 'happenTime',
+            dataIndex: 'entity',
+            render: (entity) => {
+                return <Text>{TimeUtil.dayStr(entity.happenTime)}</Text>
+            },
+        }, {
+            title: '到账利润',
+            key: 'currentMonthProfit',
+            dataIndex: 'entity',
+            render: (entity) => {
+                return <Text>{MoneyUtil.getStr(entity.money)}</Text>
+            },
+        }, {
+            title: '操作',
+            key: 'action',
+            render: (_, record) => (
+                <Space size="middle">
+                    <a onClick={() => {
+                        this.deleteInvestDetail(record.entity)
+                    }}>删除</a>
+                </Space>
+            ),
+        },]
+
         this.investColumns = [{
             title: '类型',
             key: 'type',
             dataIndex: 'entity',
             render: (entity) => {
-                let color = 'gold'
-                if (entity.info.productType.isStock()) {
-                    color = 'red'
-                }
-                return <Tag color={color} key={entity.info.productType.code}>
-                    {entity.info.productType.name}
-                </Tag>
+                return UIUtils.getProductTag(entity.info.productType)
             },
         }, {
             title: '名称',
@@ -110,7 +175,7 @@ class MonthPage extends React.Component {
             dataIndex: 'entity',
             render: (entity) => {
                 let type = ""
-                if (!TimeUtil.inMonth(entity.currentPrice?.happenTime, entity.currentMonthDate)) {
+                if (!TimeUtil.inMonth(entity.currentPrice?.happenTime, this.monthDate)) {
                     type = "secondary"
                 }
                 return <Text type={type}>{TimeUtil.dayStr(entity.currentPrice?.happenTime)}</Text>
@@ -120,21 +185,21 @@ class MonthPage extends React.Component {
             key: 'sellPrice',
             dataIndex: 'entity',
             render: (entity) => {
-                return <Text>{MoneyUtil.getStr(Math.abs(entity.buySells?.currentMonthSellMoney))}</Text>
+                return <Text>{MoneyUtil.getStr(Math.abs(entity.buySells?.filterSellMoney))}</Text>
             },
-            sorter: (a, b) => MoneyUtil.compareAbs(a.entity.buySells?.currentMonthSellMoney, b.entity.buySells?.currentMonthSellMoney)
+            sorter: (a, b) => MoneyUtil.compareAbs(a.entity.buySells?.filterSellMoney, b.entity.buySells?.filterSellMoney)
         }, {
             title: '卖出利润率',
             key: 'sellProfitPercent',
             dataIndex: 'entity',
             render: (entity) => {
-                let sellProfitPercent = this.getCurrentMonthSellProfitPercent(entity)
+                let sellProfitPercent = InvestmentVMService.getSellProfitPercent(entity)
                 return <Text type={MoneyUtil.getPercentColorType(sellProfitPercent)}>
                     {MoneyUtil.getPercentStr(sellProfitPercent)}</Text>
             },
             sorter: (a, b) => {
-                let asellProfitPercent = this.getCurrentMonthSellProfitPercent(a.entity)
-                let bsellProfitPercent = this.getCurrentMonthSellProfitPercent(b.entity)
+                let asellProfitPercent = InvestmentVMService.getSellProfitPercent(a.entity)
+                let bsellProfitPercent = InvestmentVMService.getSellProfitPercent(b.entity)
                 return DataUtil.compare(asellProfitPercent, bsellProfitPercent)
             }
         }, {
@@ -142,41 +207,41 @@ class MonthPage extends React.Component {
             key: 'sellProfit',
             dataIndex: 'entity',
             render: (entity) => {
-                return <Text>{MoneyUtil.getStr(entity.profits?.currentMonthMoney)}</Text>
+                return <Text>{MoneyUtil.getStr(entity.profits?.filterTotalMoney)}</Text>
             },
             sorter: (a, b) => {
-                return MoneyUtil.compare(a.entity.profits?.currentMonthMoney, b.entity.profits?.currentMonthMoney)
+                return MoneyUtil.compare(a.entity.profits?.filterTotalMoney, b.entity.profits?.filterTotalMoney)
             }
         }, {
-            title: '当月投资',
-            key: 'currentMonthInvest',
+            title: '当期投资',
+            key: 'timeInvest',
             dataIndex: 'entity',
             render: (entity) => {
-                return <Text>{MoneyUtil.getStr(entity.buySells?.currentMonthMoney)}</Text>
+                return <Text>{MoneyUtil.getStr(entity.buySells?.filterMoney)}</Text>
             },
-            sorter: (a, b) => MoneyUtil.compare(a.entity.buySells?.currentMonthMoney, b.entity.buySells?.currentMonthMoney)
+            sorter: (a, b) => MoneyUtil.compare(a.entity.buySells?.filterMoney, b.entity.buySells?.filterMoney)
         }, {
-            title: '当月账面利润',
-            key: 'currentMonthPaperProfit',
+            title: '当期账面利润',
+            key: 'qoqPaperProfit',
             dataIndex: 'entity',
             render: (entity) => {
-                return <Text>{MoneyUtil.getStr(this.getCurrentMonthPagerProfit(entity))}</Text>
+                return <Text>{MoneyUtil.getStr(this.getQoqPaperProfit(entity))}</Text>
             },
             sorter: (a, b) => {
-                return MoneyUtil.compare(this.getCurrentMonthPagerProfit(a.entity), this.getCurrentMonthPagerProfit(b.entity))
+                return MoneyUtil.compare(this.getQoqPaperProfit(a.entity), this.getQoqPaperProfit(b.entity))
             }
         }, {
-            title: '当月账面利润率',
-            key: 'currentMonthPaperProfitPercent',
+            title: '当期账面利润率',
+            key: 'qoqPaperProfitPercent',
             dataIndex: 'entity',
             render: (entity) => {
-                let paperProfitPercent = this.getCurrentMonthPagerProfitPercent(entity)
+                let paperProfitPercent = this.getQoqPaperProfitPercent(entity)
                 return <Text type={MoneyUtil.getPercentColorType(paperProfitPercent)}>
                     {MoneyUtil.getPercentStr(paperProfitPercent)}</Text>
             },
             sorter: (a, b) => {
-                let apaperProfitPercent = this.getCurrentMonthPagerProfitPercent(a.entity)
-                let bpaperProfitPercent = this.getCurrentMonthPagerProfitPercent(b.entity)
+                let apaperProfitPercent = this.getQoqPaperProfitPercent(a.entity)
+                let bpaperProfitPercent = this.getQoqPaperProfitPercent(b.entity)
                 return DataUtil.compare(apaperProfitPercent, bpaperProfitPercent)
             }
         }, {
@@ -192,13 +257,13 @@ class MonthPage extends React.Component {
             key: 'paperProfitPercent',
             dataIndex: 'entity',
             render: (entity) => {
-                let paperProfitPercent = this.getPagerProfitPercent(entity)
+                let paperProfitPercent = InvestmentVMService.getPaperProfitPercent(entity)
                 return <Text type={MoneyUtil.getPercentColorType(paperProfitPercent)}>
                     {MoneyUtil.getPercentStr(paperProfitPercent)}</Text>
             },
             sorter: (a, b) => {
-                let apaperProfitPercent = this.getPagerProfitPercent(a.entity)
-                let bpaperProfitPercent = this.getPagerProfitPercent(b.entity)
+                let apaperProfitPercent = InvestmentVMService.getPaperProfitPercent(a.entity)
+                let bpaperProfitPercent = InvestmentVMService.getPaperProfitPercent(b.entity)
                 return DataUtil.compare(apaperProfitPercent, bpaperProfitPercent)
             }
         }, {
@@ -206,10 +271,10 @@ class MonthPage extends React.Component {
             key: 'paperProfit',
             dataIndex: 'entity',
             render: (entity) => {
-                return <Text>{MoneyUtil.getStr(this.getPagerProfit(entity))}</Text>
+                return <Text>{MoneyUtil.getStr(InvestmentVMService.getPaperProfit(entity))}</Text>
             },
             sorter: (a, b) => {
-                return MoneyUtil.compare(this.getPagerProfit(a.entity), this.getPagerProfit(b.entity))
+                return MoneyUtil.compare(InvestmentVMService.getPaperProfit(a.entity), InvestmentVMService.getPaperProfit(b.entity))
             }
         }, {
             title: '最新价值',
@@ -234,7 +299,6 @@ class MonthPage extends React.Component {
                 return <Text>{MoneyUtil.getDetailStr(MoneyUtil.safeDivision(entity.currentPrice?.money, entity.buySells.totalCount))}</Text>
             },
         },]
-
         this.subInvestColumns = [{
             title: '发生时间',
             key: 'happenTime',
@@ -298,112 +362,27 @@ class MonthPage extends React.Component {
                 </Space>
             ),
         },]
-
-        this.assetDebtColumns = [{
-            title: '类型',
-            key: 'type',
-            dataIndex: 'entity',
-            render: (entity) => {
-                let color = 'geekblue'
-                if (entity.info.productType.isDebt()) {
-                    color = 'green'
-                }
-                return <Tag color={color} key={entity.info.productType.code}>
-                    {entity.info.productType.name}
-                </Tag>
-            },
-        }, {
-            title: '名称',
-            key: 'name',
-            dataIndex: 'entity',
-            render: (entity) => {
-                return <Text>{entity.info.productName}</Text>
-            },
-        },  {
-            title: '最新时间',
-            key: 'happenTime',
-            dataIndex: 'entity',
-            render: (entity) => {
-                let type = ""
-                if (!TimeUtil.inMonth(entity.currentPrice?.happenTime, entity.currentMonthDate)) {
-                    type = "secondary"
-                }
-                return <Text type={type}>{TimeUtil.dayStr(entity.currentPrice?.happenTime)}</Text>
-            },
-        }, {
-            title: '总额',
-            key: 'currentPrice',
-            dataIndex: 'entity',
-            render: (entity) => {
-                return <Text>{MoneyUtil.getStr(entity.currentPrice?.money)}</Text>
-            },
-            sorter: (a, b) => MoneyUtil.compare(a.entity.currentPrice?.money, b.entity.currentPrice?.money)
-        }, {
-            title: '到账利润',
-            key: 'currentMonthProfit',
-            dataIndex: 'entity',
-            render: (entity) => {
-                return <Text>{MoneyUtil.getStr(entity.profits?.currentMonthMoney)}</Text>
-            },
-            sorter: (a, b) => MoneyUtil.compare(a.entity.profits?.currentMonthMoney, b.entity.profits?.currentMonthMoney)
-        }]
-
-        this.subAssetDebtColumns = [{
-            title: '发生时间',
-            key: 'happenTime',
-            dataIndex: 'entity',
-            render: (entity) => {
-                return <Text>{TimeUtil.dayStr(entity.happenTime)}</Text>
-            },
-        }, {
-            title: '到账利润',
-            key: 'currentMonthProfit',
-            dataIndex: 'entity',
-            render: (entity) => {
-                return <Text>{MoneyUtil.getStr(entity.money)}</Text>
-            },
-        }, {
-            title: '操作',
-            key: 'action',
-            render: (_, record) => (
-                <Space size="middle">
-                    <a onClick={() => {
-                        this.deleteInvestDetail(record.entity)
-                    }}>删除</a>
-                </Space>
-            ),
-        },]
     }
 
-    getCurrentMonthPagerProfit(entity) {
-        let lastMonthPaperProfit = this.getPagerProfit(this.lastMonthProductToDetail[entity.info.productId])
-        let paperProfit = this.getPagerProfit(entity)
+    getQoqPaperProfit(entity) {
+        let lastMonthPaperProfit = InvestmentVMService.getPaperProfit(this._getLastMonthProductDetail(entity.info.productId))
+        let paperProfit = InvestmentVMService.getPaperProfit(entity)
         return paperProfit - lastMonthPaperProfit
     }
 
     //用这个月新增的账面利润 / 总投资额 得到这个月的收益率
-    getCurrentMonthPagerProfitPercent(entity) {
-        let lastMonthEntity = this.lastMonthProductToDetail[entity.info.productId]
-        return MoneyUtil.safeDivision(this.getCurrentMonthPagerProfit(entity), entity?.buySells?.totalMoney)
+    getQoqPaperProfitPercent(entity) {
+        return MoneyUtil.safeDivision(this.getQoqPaperProfit(entity), entity?.buySells?.totalMoney)
     }
 
-    getPagerProfit(entity) {
-        if(DataUtil.isNull(entity)) {
-            return 0
+    _getLastMonthProductDetail(productId) {
+        for(let item of [this.lastMonthAllInvestData['fund'], this.lastMonthAllInvestData['stock'], 
+            this.lastMonthAllInvestData['asset'], this.lastMonthAllInvestData['debt']]) {
+            if(productId in item['products']) {
+                return item['products'][productId]
+            }
         }
-        return entity.currentPrice?.money - entity.buySells?.totalMoney
-    }
-
-    getPagerProfitPercent(entity) {
-        return MoneyUtil.safeDivision(this.getPagerProfit(entity), entity.buySells?.totalMoney)
-    }
-
-    getCurrentMonthSellProfitPercent(entity) {
-        return MoneyUtil.safeDivision(entity.profits?.currentMonthMoney, Math.abs(entity.buySells?.currentMonthSellMoney))
-    }
-    
-    queryData(monthDate) {
-        return IncomeExpenditureService.queryMonth(monthDate)
+        return null
     }
 
     insertData(inputValues) {
@@ -418,79 +397,6 @@ class MonthPage extends React.Component {
             console.warn(e)
             alert(e)
             return false
-        }
-    }
-
-    queryAllInvestDataBefore(monthDate) {
-        let map = InvestmentService.getAllInvestDetailBefore(TimeUtil.monthEnd(monthDate))
-        this._processInvestData(map.asset, monthDate)
-        this._processInvestData(map.debt, monthDate)
-        this._processInvestData(map.stock, monthDate)
-        this._processInvestData(map.invest, monthDate)
-        return map
-    }
-
-    inflateLastMonthData(currentMonthDate) {
-        let investMap = this.queryAllInvestDataBefore(TimeUtil.lastMonthEnd(currentMonthDate))
-
-        let inveseData = this.getArrFromInvestMap(investMap.invest)
-        let stockData = this.getArrFromInvestMap(investMap.stock)
-        let productToDetail = {}
-        for(let data of inveseData) {
-            productToDetail[data.key] = data.entity
-        }
-        for(let data of stockData) {
-            productToDetail[data.key] = data.entity
-        }
-        this.lastMonthProductToDetail = productToDetail
-    
-        let totalAssetMoneys = this.dealInvestDetailList(investMap.asset, [])
-        let totalDebtMoneys = this.dealInvestDetailList(investMap.debt, [])
-        let totalInvestMoneys = this.dealInvestDetailList(investMap.invest, [])
-        let totalStockMoneys = this.dealInvestDetailList(investMap.stock, [])
-
-        this.lastMonthTotalMoney = totalAssetMoneys[0] + totalDebtMoneys[0] + totalInvestMoneys[2] + totalStockMoneys[2]
-        return this.lastMonthTotalMoney
-    }
-
-    _processInvestData(details, currentMonthDate) {
-        for (let productId of Object.keys(details)) {
-            let detail = details[productId]
-            detail.currentMonthDate = currentMonthDate
-            if (!DataUtil.isNull(detail.profits)) {
-                let currentMonthMoney = 0
-                let currentMonthDatas = []
-                detail.profits.datas.forEach(ele => {
-                    if (TimeUtil.inMonth(ele.happenTime, currentMonthDate)) {
-                        currentMonthMoney += ele.money
-                        currentMonthDatas.push(ele)
-                    }
-                })
-                detail.profits.currentMonthMoney = currentMonthMoney
-                detail.profits.currentMonthDatas = currentMonthDatas
-            }
-            if (!DataUtil.isNull(detail.buySells)) {
-                let currentMonthMoney = 0
-                let currentMonthSellMoney = 0
-                let currentMonthTotalCount = 0
-                let currentMonthDatas = []
-                detail.buySells.datas.forEach(ele => {
-                    if (TimeUtil.inMonth(ele.happenTime, currentMonthDate)) {
-                        currentMonthMoney += ele.money
-                        if(ele.money < 0) {
-                            currentMonthSellMoney += ele.money
-                        }
-                        if(!DataUtil.notNumber(ele.count)) {
-                            currentMonthTotalCount += ele.count
-                        }
-                        currentMonthDatas.push(ele)
-                    }
-                })
-                detail.buySells.currentMonthMoney = currentMonthMoney
-                detail.buySells.currentMonthSellMoney = currentMonthSellMoney
-                detail.buySells.currentMonthTotalCount = currentMonthTotalCount
-                detail.buySells.currentMonthDatas = currentMonthDatas
-            }
         }
     }
 
@@ -557,102 +463,76 @@ class MonthPage extends React.Component {
         })
     }
 
-    createShowMoneyRowIfBiggerThan(title, money, valueRange = []) {
-        let textType = ""
-        let pMoney = Math.abs(money)
-        if (valueRange[0] !== undefined) {
-            if (pMoney > valueRange[1] * 100) {
-                textType = "danger"
-            } else if (pMoney > valueRange[0] * 100) {
-                textType = "warning"
+    getByMonthSideDatas() {
+        var months = SummaryService.queryMonths()
+        this.months = months
+        var map = {}
+        months.forEach(element => {
+            let year = element.substring(0, 4)
+            if (DataUtil.isNull(map[year])) {
+                map[year] = []
+            }
+            map[year].push(element)
+        })
+        console.log(map)
+        return map
+    }
+
+    showAddNewMonthDialog() {
+        this.setState({
+            showDialog: "addNewMonth",
+        })
+    }
+
+    addNewMoth(d) {
+        if (isNaN(d)) {
+            message.error("请输入有效月份，如 2022-5")
+        } else {
+            if (this.months.includes(TimeUtil.monthStr(d))) {
+                message.error("已有当前月份")
+                this.hideDialog()
             } else {
-                textType = "success"
+                SummaryService.addMonth(d)
+                this.state.sideKey = TimeUtil.monthStr(d)
+                this.hideDialog()
             }
         }
-        return this.createShowTextRow(title, MoneyUtil.getStr(money), textType)
     }
 
-    createShowMoneyRowIfSmallerThan(title, money, valueRange = []) {
-        let textType = ""
-        let pMoney = Math.abs(money)
-        if (valueRange[0] !== undefined) {
-            if (pMoney < valueRange[1] * 100) {
-                textType = "danger"
-            } else if (pMoney < valueRange[0] * 100) {
-                textType = "warning"
-            } else {
-                textType = "success"
-            }
-        }
-        return this.createShowTextRow(title, MoneyUtil.getStr(money), textType)
-    }
-
-    createShowMoneyRow(title, money) {
-        return this.createShowTextRow(title, MoneyUtil.getStr(money), "")
-    }
-
-    createShowTextRow(title, text, textType = "") {
-        return (<Row align='middle' style={{ margin: '0 10px', padding: '4px 0', }} >
-            <Col span={12}>
-                <Text type={textType} strong>{title}</Text>
-            </Col>
-            <Col span={12} align='right'>
-                <Text type={textType} strong>{text}</Text>
-            </Col>
-        </Row>
-        )
-    }
-
-    newEntity(happenTime, title, money, desc, child=[]) {
-        return {
-            happenTime: happenTime,
-            title: title,
-            money: money,
-            desc: desc,
-            child: child
-        }
-    }
-
-    dealInvestDetailList(details, entitys) {
-        let totalCurrentPrice = 0, totalBuySellMoney = 0, totalProfit = 0
-        for (let productId of Object.keys(details)) {
-            let detail = details[productId]
-            if (!DataUtil.isNull(detail.currentPrice)) {
-                totalCurrentPrice += detail.currentPrice.money
-            }
-            if (!DataUtil.isNull(detail.profits)) {
-                if(detail.profits.currentMonthMoney !== 0) {
-                    entitys.push(this.newEntity(detail.info.happenTime, detail.info.productName, detail.profits.currentMonthMoney, null))
-                    totalProfit += detail.profits.currentMonthMoney
-                }
-            }
-            if (!DataUtil.isNull(detail.buySells)) {
-                totalBuySellMoney += detail.buySells.totalMoney
-            }
-        }
-        return [totalCurrentPrice, totalProfit, totalBuySellMoney]
-    }
-
-    getArrFromInvestMap(map) {
-        let arr = []
-        for (let productId of Object.keys(map)) {
-            let detail = map[productId]
-            if(MoneyUtil.noValue(detail.currentPrice?.money) && MoneyUtil.noValue(detail.profits?.currentMonthMoney) && 
-                MoneyUtil.noValue(detail.buySells?.currentMonthMoney) && MoneyUtil.noValue(detail.buySells?.totalMoney)) {
-                //四个值全没有，当前月不展示
-            } else {
-                arr.push({ key: productId, entity: detail })
-            }
-        }
-        return arr
+    hideDialog() {
+        this.setState({
+            showDialog: "",
+        })
     }
 
     render() {
-        let currentMonthDate = new Date(this.props.month)
+        let siderItems = []
+        let openKeys = []
+        let sideDatas = this.getByMonthSideDatas()
+        let lastMonth = null
+        siderItems = Object.keys(sideDatas).sort((a, b) => b > a ? 1 : -1).map((year, i) => {
+            openKeys.push(year)
+            return {
+                key: year,
+                label: year,
+                children: sideDatas[year].sort((a, b) => b > a ? 1 : -1).map((month, j) => {
+                    if (lastMonth == null) { lastMonth = month }
+                    return {
+                        key: month,
+                        label: month,
+                    };
+                }),
+            };
+        })
+        if (DataUtil.isNull(this.state.sideKey)) {
+            this.state.sideKey = lastMonth
+        }
+        this.monthDate = new Date(this.state.sideKey)
+        let currentMonthDate = this.monthDate
         if (DataUtil.notNumber(currentMonthDate)) {
             return <Content />
         }
-        console.log("month page render " + this.props.month)
+        console.log("month page render ", currentMonthDate)
         //处理一些类型数据
         let expendCode2Name = {}, incomeCode2Name = {}
         IncomeExpenditureType.toList(IncomeExpenditureService.getExpenditureTypes()).forEach(type => {
@@ -677,36 +557,35 @@ class MonthPage extends React.Component {
         let totalIncome = monthData['income']['total'], totalExpend = monthData['expend']['total']
 
         //处理资产、负债、投资的一些总数据
-        let investMap = this.queryAllInvestDataBefore(currentMonthDate)
-        
-        let passiveIncomeEntitys = [], passiveExpendEntitys = []
-        let totalAssetMoneys = this.dealInvestDetailList(investMap.asset, passiveIncomeEntitys)
-        let totalDebtMoneys = this.dealInvestDetailList(investMap.debt, passiveExpendEntitys)
-        let totalInvestMoneys = this.dealInvestDetailList(investMap.invest, passiveIncomeEntitys)
-        let totalStockMoneys = this.dealInvestDetailList(investMap.stock, passiveIncomeEntitys)
+        let allInvestData = InvestmentVMService.queryMonthData(currentMonthDate)
+        let passiveIncomeSummary = this._getPassiveIncomeSummary(allInvestData)
+        let passiveExpendSummary = this._getPassiveExpendSummary(allInvestData)
 
-        let lastMonthTotalMoney = this.inflateLastMonthData(currentMonthDate)
-        let currentMonthTotalMoney = totalAssetMoneys[0] + totalDebtMoneys[0] + totalInvestMoneys[2] + totalStockMoneys[2]
-        let currentMonthAddMoney = totalIncome + totalExpend + totalAssetMoneys[1]
-            + totalInvestMoneys[1] + totalStockMoneys[1] + totalDebtMoneys[1]
-        let totalPassiveMoney = totalAssetMoneys[1] + totalInvestMoneys[1] + totalStockMoneys[1]
+        console.log("===== monthData     =====", monthData)
+        console.log("===== allInvestData =====", allInvestData)
+
+        this.lastMonthAllInvestData = InvestmentVMService.queryMonthData(TimeUtil.lastMonthEnd(currentMonthDate))
+
+        let currentMonthTotalMoney = this._getTotalMoney(allInvestData)
+        let lastMonthTotalMoney = this._getTotalMoney(this.lastMonthAllInvestData)
+        let currentMonthAddMoney = totalIncome + totalExpend + passiveIncomeSummary['total'] + passiveExpendSummary['total']
 
         incomeExpendData.push({key: "主动收入", entity: this.newEntity(null, "主动收入", totalIncome, null, monthData['income']['details'])})    
-        incomeExpendData.push({key: "被动收入", entity: this.newEntity(null, "被动收入", totalPassiveMoney, 
-            null, passiveIncomeEntitys)})
+        incomeExpendData.push({key: "被动收入", entity: this.newEntity(null, "被动收入",  passiveIncomeSummary['total'], 
+            null, passiveIncomeSummary['details'])})
         incomeExpendData.push({key: "主动支出", entity: this.newEntity(null, "主动支出", totalExpend, null, monthData['expend']['details'])})
-        incomeExpendData.push({key: "被动支出", entity: this.newEntity(null, "被动支出", totalDebtMoneys[1], 
-            null, passiveExpendEntitys)})
+        incomeExpendData.push({key: "被动支出", entity: this.newEntity(null, "被动支出", passiveExpendSummary['total'], 
+            null, passiveExpendSummary['details'])})
         incomeExpendData.push({key: "新增现金", entity: this.newEntity(null, "新增现金", currentMonthAddMoney, 
             null)})
         incomeExpendData.push({key: "上期总资产", entity: this.newEntity(null, "上期总资产", lastMonthTotalMoney, 
             null)})
 
         let totalMoneyEntitys = []
-        totalMoneyEntitys.push(this.newEntity(null, "资产总额", totalAssetMoneys[0], null))
-        totalMoneyEntitys.push(this.newEntity(null, "负债总额", totalDebtMoneys[0], null))
-        totalMoneyEntitys.push(this.newEntity(null, "投资总额", totalInvestMoneys[2], `账面价值：${MoneyUtil.getStr(totalInvestMoneys[0])}`))
-        totalMoneyEntitys.push(this.newEntity(null, "股票总额", totalStockMoneys[2], `账面价值：${MoneyUtil.getStr(totalStockMoneys[0])}`))
+        totalMoneyEntitys.push(this.newEntity(null, "资产总额", allInvestData['asset']['totalMoneys'][0], null))
+        totalMoneyEntitys.push(this.newEntity(null, "负债总额", allInvestData['debt']['totalMoneys'][0], null))
+        totalMoneyEntitys.push(this.newEntity(null, "投资总额", allInvestData['fund']['totalMoneys'][1], `账面价值：${MoneyUtil.getStr(allInvestData['fund']['totalMoneys'][0])}`))
+        totalMoneyEntitys.push(this.newEntity(null, "股票总额", allInvestData['stock']['totalMoneys'][1], `账面价值：${MoneyUtil.getStr(allInvestData['stock']['totalMoneys'][0])}`))
         incomeExpendData.push({key: "当前总资产", entity: this.newEntity(null, "当前总资产", currentMonthTotalMoney, 
             null, totalMoneyEntitys)})
 
@@ -726,22 +605,16 @@ class MonthPage extends React.Component {
         }
 
         //处理资产、负债、投资的表格数据
-        let inveseData = this.getArrFromInvestMap(investMap.invest)
-        let stockData = this.getArrFromInvestMap(investMap.stock)
-
+        let fundData = this._mapToList(allInvestData['fund']['products'], true)
+        let stockData = this._mapToList(allInvestData['stock']['products'], true)
         let assetDebtDatas = []
-        for (let productId of Object.keys(investMap.asset)) {
-            let detail = investMap.asset[productId]
-            assetDebtDatas.push({ key: productId, entity: detail })
-        }
-        for (let productId of Object.keys(investMap.debt)) {
-            let detail = investMap.debt[productId]
-            assetDebtDatas.push({ key: productId, entity: detail })
-        }
+        assetDebtDatas.push(...this._mapToList(allInvestData['asset']['products']),
+            ...this._mapToList(allInvestData['debt']['products']))
+
         let subInvestRowRender = (record, index) => {
             const data = [];
-            record.entity.buySells.currentMonthDatas.forEach(ele => {
-                for (let profit of record.entity.profits?.currentMonthDatas ?? []) {
+            record.entity.buySells.filterDatas.forEach(ele => {
+                for (let profit of record.entity.profits?.filterDatas ?? []) {
                     if (profit.buySellId === ele.id) {
                         ele.profitMoney = profit.money
                         break
@@ -755,12 +628,12 @@ class MonthPage extends React.Component {
             return <Table columns={this.subInvestColumns} dataSource={data} pagination={false} />;
         }
         let subInvestRowExpandable = (record) => {
-            return !DataUtil.isNull(record.entity.buySells?.currentMonthDatas) &&
-                record.entity.buySells?.currentMonthDatas.length > 0
+            return !DataUtil.isNull(record.entity.buySells?.filterDatas) &&
+                record.entity.buySells?.filterDatas.length > 0
         }
         let subAssetDebtRowRender = (record, index) => {
             const data = [];
-            record.entity.profits.currentMonthDatas.forEach(ele => {
+            record.entity.profits.filterDatas.forEach(ele => {
                 data.push({
                     key: ele.id,
                     entity: ele
@@ -769,12 +642,11 @@ class MonthPage extends React.Component {
             return <Table columns={this.subAssetDebtColumns} dataSource={data} pagination={false} />;
         }
         let subAssetDebtRowExpandable = (record) => {
-            return !DataUtil.isNull(record.entity.profits?.currentMonthDatas) &&
-                record.entity.profits?.currentMonthDatas.length > 0
+            return !DataUtil.isNull(record.entity.profits?.filterDatas) &&
+                record.entity.profits?.filterDatas.length > 0
         }
 
-        return (
-            <Content className='Content'>
+        let contentView = <Content className='Content'>
                 <Row>
                     <Divider orientation="center">使用步骤</Divider>
                     <Space direction='vertical'>
@@ -798,7 +670,7 @@ class MonthPage extends React.Component {
                         }, {
                             name: "date",
                             required: true,
-                            inMonth: this.props.month
+                            inMonth: currentMonthDate
                         }, {
                             name: "desc",
                         }
@@ -816,7 +688,7 @@ class MonthPage extends React.Component {
                         }, {
                             name: "date",
                             required: true,
-                            inMonth: this.props.month
+                            inMonth: currentMonthDate
                         }, {
                             name: "desc",
                         }
@@ -831,8 +703,8 @@ class MonthPage extends React.Component {
                                 rowExpandable: subIncomeExpendRowExpandable
                             }} pagination={{ pageSize: 20 }} sortDirections={['descend']} />
                         <Divider orientation="center">指标</Divider>
-                        {this.createShowTextRow("被动收入/主动支出（财富自有率）", DataUtil.getPercent(totalPassiveMoney / Math.abs(totalExpend)))}
-                        {this.createShowTextRow("被动收入/主动收入", DataUtil.getPercent(totalPassiveMoney / totalIncome))}
+                        {UIUtils.createShowTextRow("被动收入/支出（财富自有率）", DataUtil.getPercent(passiveIncomeSummary['total'] / Math.abs(totalExpend + passiveExpendSummary['total'])))}
+                        {UIUtils.createShowTextRow("被动收入/主动收入", DataUtil.getPercent(passiveIncomeSummary['total'] / totalIncome))}
                         {this.createShowMoneyRowIfBiggerThan("总资产环比误差", currentMonthTotalMoney - lastMonthTotalMoney - currentMonthAddMoney, [500, 1000])}
                     </Col>
                 </Row>
@@ -855,7 +727,7 @@ class MonthPage extends React.Component {
                         }, {
                             name: "date",
                             required: true,
-                            inMonth: this.props.month
+                            inMonth: currentMonthDate
                         }
                         ]} onSubmit={(s) => {
                             return this.addAssetDebtProfit(s)
@@ -877,7 +749,7 @@ class MonthPage extends React.Component {
                         }, {
                             name: "date",
                             required: true,
-                            inMonth: this.props.month
+                            inMonth: currentMonthDate
                         }
                         ]} onSubmit={(s) => {
                             return this.addAssetDebtProfit(s)
@@ -916,7 +788,7 @@ class MonthPage extends React.Component {
                         }, {
                             name: "date",
                             required: true,
-                            inMonth: this.props.month
+                            inMonth: currentMonthDate
                         }
                         ]} onSubmit={(s) => {
                             return this.addBuyInvest(s)
@@ -955,7 +827,7 @@ class MonthPage extends React.Component {
                         }, {
                             name: "date",
                             required: true,
-                            inMonth: this.props.month
+                            inMonth: currentMonthDate
                         }
                         ]} onSubmit={(s) => {
                             return this.addSellInvest(s)
@@ -966,12 +838,149 @@ class MonthPage extends React.Component {
                             expandedRowRender: subInvestRowRender,
                             rowExpandable: subInvestRowExpandable
                         }} pagination={{ pageSize: 20 }} scroll={{ x: 1500 }} sortDirections={['descend']} />
-                <Table columns={this.investColumns} dataSource={inveseData} expandable={{
+                <Table columns={this.investColumns} dataSource={fundData} expandable={{
                             expandedRowRender: subInvestRowRender,
                             rowExpandable: subInvestRowExpandable
                         }} pagination={{ pageSize: 20 }} scroll={{ x: 1500 }} sortDirections={['descend']} />
             </Content>
-        )
+        
+        return <Layout>
+                    <Sider width={200}>
+                        <Menu
+                            className='Menu'
+                            mode="inline"
+                            openKeys={openKeys}
+                            selectedKeys={[this.state.sideKey]}
+                            items={siderItems}
+                            onSelect={(item) => {
+                                this.setState(() => this.state.sideKey = item.key)
+                            }}
+                        />
+                    </Sider>
+                    <Layout className='Layout-inner'>
+                        <Row align='middle'>
+                            <Col flex="auto">
+                                <Breadcrumb>
+                                    <Breadcrumb.Item>{this.state.sideKey}</Breadcrumb.Item>
+                                </Breadcrumb>
+                            </Col>
+                            <Col span={12} align='right'>
+                                <Button onClick={() => this.showAddNewMonthDialog()}>新加月份</Button>
+                            </Col>
+                        </Row>
+                        {contentView}
+                    </Layout>
+                    <CusDialog title="新加月份" visible={this.state.showDialog === "addNewMonth"}
+                        cfgs={[{
+                            name: "date",
+                            hint: "月份",
+                            picker: "month",
+                            defaultValue: new Date()
+                        }]}
+                        onOk={(state) => this.addNewMoth(state.date)}
+                        onCancel={() => this.hideDialog()} />
+                </Layout>
+    }
+
+    createShowMoneyRowIfBiggerThan(title, money, valueRange = []) {
+        let textType = ""
+        let pMoney = Math.abs(money)
+        if (valueRange[0] !== undefined) {
+            if (pMoney > valueRange[1] * 100) {
+                textType = "danger"
+            } else if (pMoney > valueRange[0] * 100) {
+                textType = "warning"
+            } else {
+                textType = "success"
+            }
+        }
+        return UIUtils.createShowTextRow(title, MoneyUtil.getStr(money), textType)
+    }
+
+    createShowMoneyRowIfSmallerThan(title, money, valueRange = []) {
+        let textType = ""
+        let pMoney = Math.abs(money)
+        if (valueRange[0] !== undefined) {
+            if (pMoney < valueRange[1] * 100) {
+                textType = "danger"
+            } else if (pMoney < valueRange[0] * 100) {
+                textType = "warning"
+            } else {
+                textType = "success"
+            }
+        }
+        return UIUtils.createShowTextRow(title, MoneyUtil.getStr(money), textType)
+    }
+
+    createShowMoneyRow(title, money) {
+        return UIUtils.createShowTextRow(title, MoneyUtil.getStr(money), "")
+    }
+
+    newEntity(happenTime, title, money, desc, child=[]) {
+        return {
+            happenTime: happenTime,
+            title: title,
+            money: money,
+            desc: desc,
+            child: child
+        }
+    }
+
+    _getTotalMoney(allInvestData) {
+        let totalAssetMoneys = allInvestData['asset']['totalMoneys']
+        let totalFundMoneys = allInvestData['fund']['totalMoneys']
+        let totalStockMoneys = allInvestData['stock']['totalMoneys']
+        let totalDebtMoneys = allInvestData['debt']['totalMoneys']
+        return totalAssetMoneys[0] + totalDebtMoneys[0] + totalFundMoneys[1] + totalStockMoneys[1]
+    }
+
+    _mapToList(productMap, filter=false) {
+        let arr = []
+        for (let productId of Object.keys(productMap)) {
+            let detail = productMap[productId]
+            if(filter && MoneyUtil.noValue(detail.currentPrice?.money) && MoneyUtil.noValue(detail.profits?.filterTotalMoney) && 
+                MoneyUtil.noValue(detail.buySells?.filterMoney) && MoneyUtil.noValue(detail.buySells?.totalMoney)) {
+                //四个值全没有，不展示
+            } else {
+                arr.push({ key: productId, entity: detail })
+            }
+        }
+        return arr
+    }
+
+    _getProductsProfitEntitys(products) {
+        if(DataUtil.isEmpty(products)) {
+            return []
+        }
+        return Object.keys(products).map(productId => {
+            let product = products[productId]
+            return this.newEntity(product.info.happenTime, product.info.productName, product.filterTotalMoney, null)
+        })
+    }
+
+    _getPassiveIncomeSummary(yearInvestData) {
+        let assetData = yearInvestData['asset']
+        let fundData = yearInvestData['fund']
+        let stockData = yearInvestData['stock']
+        let details = []
+        details.push(...this._getProductsProfitEntitys(assetData['products']),
+                 ...this._getProductsProfitEntitys(fundData['products']),
+                 ...this._getProductsProfitEntitys(stockData['products']))
+        return {
+            'total': assetData['totalProfitMoneys'][1] + fundData['totalProfitMoneys'][1] 
+                + stockData['totalProfitMoneys'][1],
+            'details': details
+        }
+    }
+
+    _getPassiveExpendSummary(yearInvestData) {
+        let debtData = yearInvestData['debt']
+        let details = []
+        details.push(...this._getProductsProfitEntitys(debtData['products']))
+        return {
+            'total': debtData['totalProfitMoneys'][1],
+            'details': details
+        }
     }
 }
 
