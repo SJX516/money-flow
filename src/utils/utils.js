@@ -15,11 +15,14 @@ class MoneyUtil {
         }
     }
 
-    static getStr(money) {
+    static getStr(money, isYuan=false) {
         if(this.noValue(money)) {
             return "-"
         }
         let temp = money / 100
+        if(isYuan) {
+            temp = money
+        }
         return `￥${this.getFixedMoney(temp)}`
     }
 

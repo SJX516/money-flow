@@ -952,10 +952,17 @@ class MonthPage extends React.Component {
         if(DataUtil.isEmpty(products)) {
             return []
         }
-        return Object.keys(products).map(productId => {
+        let profitEntitys = []
+        Object.keys(products).map(productId => {
             let product = products[productId]
-            return this.newEntity(product.info.happenTime, product.info.productName, product.filterTotalMoney, null)
+            let filterDatas = product.profits?.filterDatas
+            if(!DataUtil.isNull(filterDatas)) {
+                for(let data of filterDatas) {
+                    profitEntitys.push(this.newEntity(data.happenTime, data.productName, data.money, null))
+                }
+            }
         })
+        return profitEntitys
     }
 
     _getPassiveIncomeSummary(yearInvestData) {

@@ -141,6 +141,14 @@ class IncomeExpenditureType {
     static values() {
         return this.toList(this.Incomme).concat(this.toList(this.Expenditure))
     }
+
+    getGroup() {
+        return IncomeExpenditureType.getByCode(this.code - this.code % 100)
+    }
+
+    isIncome() {
+        return this.code > 0
+    }
 }
 
 export {IncomeExpenditureDetail, IncomeExpenditureType}
