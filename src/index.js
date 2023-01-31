@@ -21,7 +21,7 @@ class App {
 
     static _env = process.env.NODE_ENV
 
-    static _version = "1.1.20230129"
+    static _version = "1.1.20230131"
 
     static isProduction() {
         return this._env === 'production'

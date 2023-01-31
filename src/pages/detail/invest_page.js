@@ -391,7 +391,6 @@ class InvestPage extends React.Component {
     }
 
     render() {
-        console.log('invest page render')
         let code2Name = {}
         InvestmentService.getProductTypes().forEach(type => {
             code2Name[type.code] = [type.name]
@@ -413,7 +412,7 @@ class InvestPage extends React.Component {
 
         let investMap = this.queryAllInvestData()
 
-        let investDatas = []
+        let fundDatas = []
         let stockDatas = []
         let investFixVoteDatas = []
         var totalFixVote = {
@@ -428,7 +427,7 @@ class InvestPage extends React.Component {
         }
         for (let productId of Object.keys(investMap.fund)) {
             let detail = investMap.fund[productId]
-            investDatas.push({ key: productId, entity: detail })
+            fundDatas.push({ key: productId, entity: detail })
 
             var product = productIdToProduct[productId]
             var paperProfitPercent = this.getPagerProfitProcent(detail)
@@ -460,16 +459,18 @@ class InvestPage extends React.Component {
         let subInvestRowRender = (record, index) => {
             const data = [];
             record.entity.buySells.datas.forEach(ele => {
-                for (let profit of record.entity.profits?.datas ?? []) {
-                    if (profit.buySellId === ele.id) {
-                        ele.profitMoney = profit.money
-                        break
+                if(ele.money !== 0) {
+                    for (let profit of record.entity.profits?.datas ?? []) {
+                        if (profit.buySellId === ele.id) {
+                            ele.profitMoney = profit.money
+                            break
+                        }
                     }
+                    data.push({
+                        key: ele.id,
+                        entity: ele
+                    });
                 }
-                data.push({
-                    key: ele.id,
-                    entity: ele
-                });
             })
             return <Table columns={this.subInvestColumns} dataSource={data} pagination={false} />;
         }
@@ -483,7 +484,7 @@ class InvestPage extends React.Component {
                     expandedRowRender: subInvestRowRender,
                     rowExpandable: subInvestRowExpandable
                 }} pagination={{pageSize: 20}} scroll={{ x: 1500 }} sortDirections={['descend']}/>
-                <Table columns={this.investColumns} dataSource={investDatas} expandable={{
+                <Table columns={this.investColumns} dataSource={fundDatas} expandable={{
                     expandedRowRender: subInvestRowRender,
                     rowExpandable: subInvestRowExpandable
                 }} pagination={{pageSize: 20}} scroll={{ x: 1500 }} sortDirections={['descend']}/>

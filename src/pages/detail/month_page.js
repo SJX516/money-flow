@@ -653,7 +653,7 @@ class MonthPage extends React.Component {
                         <Text>1. 还清各资产账户的借款（信用卡），记录资产现额</Text>
                         <Text>2. 记录 支付宝/微信 当月的 收入/支出</Text>
                         <Text>3. 记录 基金/股票 的 当月 买入/卖出 操作和当前现额等信息</Text>
-                        <Text>4. 检查 总资产环比误差 信息（大于0表示：新增现金少了/当前总资产多了），尽量保持500以下</Text>
+                        <Text>4. 检查 总资产环比误差 信息（大于0表示：收入少了/支出多了/当前总资产多了），尽量保持500以下</Text>
                     </Space>
                 </Row>
                 <Row justify="space-between" style={{ padding: '10px 5px', backgroundColor: "#eee" }}>
@@ -703,7 +703,7 @@ class MonthPage extends React.Component {
                                 rowExpandable: subIncomeExpendRowExpandable
                             }} pagination={{ pageSize: 20 }} sortDirections={['descend']} />
                         <Divider orientation="center">指标</Divider>
-                        {UIUtils.createShowTextRow("被动收入/支出（财富自有率）", DataUtil.getPercent(passiveIncomeSummary['total'] / Math.abs(totalExpend + passiveExpendSummary['total'])))}
+                        {UIUtils.createShowTextRow("被动收入/支出（财富自由率）", DataUtil.getPercent(passiveIncomeSummary['total'] / Math.abs(totalExpend + passiveExpendSummary['total'])))}
                         {UIUtils.createShowTextRow("被动收入/主动收入", DataUtil.getPercent(passiveIncomeSummary['total'] / totalIncome))}
                         {this.createShowMoneyRowIfBiggerThan("总资产环比误差", currentMonthTotalMoney - lastMonthTotalMoney - currentMonthAddMoney, [500, 1000])}
                     </Col>
