@@ -1,6 +1,6 @@
+import { App, DB_INIT } from '../../app';
+import { InvestmentDetail, InvestmentProduct, InvestmentRecordType, InvestmentType } from '../entity/investment';
 import { BaseRepo } from './base_repo';
-import { App, DB_INIT } from '../..';
-import { InvestmentDetail, InvestmentProduct, InvestmentProductReal, InvestmentRecordType, InvestmentType} from '../entity/investment';
 
 class InvestmentProductRepo extends BaseRepo {
 
@@ -136,4 +136,4 @@ class InvestmentDetailRepo extends BaseRepo {
     }
 }
 
-export { InvestmentProductRepo, InvestmentDetailRepo}
+export { InvestmentDetailRepo, InvestmentProductRepo };

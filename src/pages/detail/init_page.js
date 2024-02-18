@@ -1,18 +1,19 @@
-import React from 'react'
-import { Button, Layout, Input, Select, Space, Card, InputNumber, Row, Col, Divider, DatePicker, Popover, Typography, message } from "antd"
-import { DataUtil, TimeUtil } from '../../utils/utils';
-import { App, DB_INIT } from '../..';
-import InputWidget from './widget/input_widget';
+import { Button, Col, Divider, Layout, Row, Typography, message } from "antd";
+import React from 'react';
+import { App, DB_INIT } from '../../app.js';
 
-const { Option } = Select;
-const { Header, Content, Sider } = Layout;
-const { Title, Paragraph, Text, Link } = Typography;
+const { Content } = Layout;
+const { Text } = Typography;
 
 class InitPage extends React.Component {
 
     constructor(props) {
         super(props)
         this.state = {}
+        this.testViewVisibility = 'hidden'
+        if(!App.isProduction()) {
+            this.testViewVisibility = 'visible'
+        }
     }
 
     async refreshDB(files) {
@@ -58,7 +59,7 @@ class InitPage extends React.Component {
                         <Button onClick={() => this.export()}>保存</Button>
                     </Col>
                 </Row>
-                <Row style={{ padding: '10px 50px 50px', backgroundColor: "#eee", margin: "10px 0"}}>
+                <Row style={{ padding: '10px 50px 50px', backgroundColor: "#eee", margin: "10px 0", visibility: this.testViewVisibility }}>
                     <Divider orientation="center">测试按钮</Divider>
                     <Button onClick={() => this.click1()}>click1</Button>
                     <Button onClick={() => this.click2()}>click2</Button>

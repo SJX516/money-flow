@@ -1,18 +1,15 @@
-import React, { useState } from 'react'
-import { Modal, message, Button, Layout, Breadcrumb, Menu, Row, Col, Input } from "antd"
+import { Layout, Menu, message } from "antd";
+import React from 'react';
+import { App, DB_INIT } from '../../app.js';
+import InitPage from '../detail/init_page';
+import InvestPage from '../detail/invest_page';
 import MonthPage from '../detail/month_page';
-import TodoPage from '../detail/todo_page'
-import InvestPage from '../detail/invest_page'
-import { DataUtil, TimeUtil } from '../../utils/utils'
-import InitPage from '../detail/init_page'
-import { SummaryService } from '../../domain/service/summary_service';
-import InputWidget from '../detail/widget/input_widget';
-import { CusDialog } from '../detail/widget/cus_dialog';
+import TodoPage from '../detail/todo_page';
+import UserPage from '../detail/user_page';
 import YearPage from '../detail/year_page';
-import { App, DB_INIT } from '../..';
 import TestPage from './test_page';
 
-const { Header, Content, Sider } = Layout;
+const { Header } = Layout;
 
 class MainPage extends React.Component {
 
@@ -23,6 +20,7 @@ class MainPage extends React.Component {
             'by_month': "按月展示",
             'by_year': "按年展示",
             'invest_detail': "投资详情",
+            'user_config': "用户配置",
         }
         if(!App.isProduction()) {
             items['test'] = '测试页面'
@@ -53,7 +51,7 @@ class MainPage extends React.Component {
                 if(App.isProduction()) {
                     this.state.navKey = "by_month"
                 } else {
-                    this.state.navKey = "test"
+                    this.state.navKey = "user_config"
                 }
                 this.refreshPage()
             }} />
@@ -66,6 +64,8 @@ class MainPage extends React.Component {
                 subPage = <YearPage />
             } else if (navKey === 'invest_detail') {
                 subPage = <InvestPage />
+            } else if (navKey === 'user_config') {
+                subPage = <UserPage />
             } else {
                 subPage = <TodoPage />
             }

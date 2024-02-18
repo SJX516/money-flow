@@ -1,5 +1,5 @@
 import { Col, Row, Tag, Typography } from "antd";
-const { Title, Paragraph, Text, Link } = Typography;
+const { Text } = Typography;
 
 class UIUtils {
 
@@ -34,4 +34,4 @@ class UIUtils {
     }
 }
 
-export { UIUtils }
+export { UIUtils };

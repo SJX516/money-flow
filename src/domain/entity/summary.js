@@ -48,4 +48,4 @@ class SummaryType {
     }
 }
 
-export {SummaryData, SummaryType}
+export { SummaryData, SummaryType };

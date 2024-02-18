@@ -1,6 +1,6 @@
-import { BaseRepo } from './base_repo';
-import { App, DB_INIT } from '../..';
+import { App } from '../../app';
 import { SummaryData, SummaryType } from '../entity/summary';
+import { BaseRepo } from './base_repo';
 
 class SummaryDataRepo extends BaseRepo {
 
@@ -47,4 +47,4 @@ class SummaryDataRepo extends BaseRepo {
     }
 }
 
-export {SummaryDataRepo}
+export { SummaryDataRepo };

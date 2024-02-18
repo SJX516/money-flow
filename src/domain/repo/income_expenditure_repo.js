@@ -1,6 +1,6 @@
-import { BaseRepo } from './base_repo';
+import { App } from '../../app';
 import { IncomeExpenditureDetail, IncomeExpenditureType } from '../entity/income_expenditure';
-import { App } from '../..';
+import { BaseRepo } from './base_repo';
 
 class IncomeExpenditureRepo extends BaseRepo {
 
@@ -55,4 +55,4 @@ class IncomeExpenditureRepo extends BaseRepo {
     }
 }
 
-export {IncomeExpenditureRepo}
+export { IncomeExpenditureRepo };

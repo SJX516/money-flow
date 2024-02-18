@@ -163,4 +163,4 @@ class InvestmentType {
     }
 }
 
-export {InvestmentProduct, InvestmentType, InvestmentRecordType, InvestmentDetail}
+export { InvestmentDetail, InvestmentProduct, InvestmentRecordType, InvestmentType };

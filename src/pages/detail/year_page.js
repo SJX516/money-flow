@@ -1,20 +1,15 @@
-import React from 'react'
-import { Table, Tag, Button, Layout, Input, Select, Space, Card, InputNumber, Row, Col, Divider, DatePicker, Popover, Typography, message, List, Menu, Breadcrumb } from "antd"
-import { IncomeExpenditureService } from '../../domain/service/income_expenditure_service'
-import { IncomeExpenditureDetail, IncomeExpenditureType } from '../../domain/entity/income_expenditure'
-import { DataUtil, MoneyUtil, TimeUtil } from '../../utils/utils';
-import InputWidget from './widget/input_widget';
-import InvestmentService from '../../domain/service/investment_service';
-import { InvestmentRecordType, InvestmentType } from '../../domain/entity/investment';
+import { Column, Pie, measureTextWidth } from '@ant-design/plots';
+import { Breadcrumb, Button, Col, Divider, Layout, Menu, Row, Table, Tag, Typography, message } from "antd";
+import React from 'react';
+import { IncomeExpenditureType } from '../../domain/entity/income_expenditure';
 import { SummaryService } from '../../domain/service/summary_service';
 import { IncomeExpenditureVMService, InvestmentVMService } from '../../domain/service/view_model_service';
+import { DataUtil, MoneyUtil, TimeUtil } from '../../utils/utils';
 import { UIUtils } from '../ui_utils';
 import { CusDialog } from './widget/cus_dialog';
-import { Pie, Column, measureTextWidth} from '@ant-design/plots';
 
-const { Option } = Select;
-const { Header, Content, Sider } = Layout;
-const { Title, Paragraph, Text, Link } = Typography;
+const { Content, Sider } = Layout;
+const { Text } = Typography;
 
 class YearPage extends React.Component {
 

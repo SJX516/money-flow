@@ -1,0 +1,1 @@
+module.exports = process.cwd() + '/node_modules/sql.js/dist/sql-wasm.wasm';

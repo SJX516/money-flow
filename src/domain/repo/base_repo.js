@@ -1,4 +1,4 @@
-import { App, DB_INIT } from '../..';
+import { App, DB_INIT } from '../../app';
 
 class BaseRepo {
 
@@ -78,4 +78,4 @@ class BaseRepo {
     convert(content) {}
 }
 
-export {BaseRepo}
+export { BaseRepo };

@@ -84,8 +84,3 @@ Date.prototype.timeStr = function() {
 console.log(new Date().format("yyyy-MM-dd hh:mm:ss"))
 console.log(new Date().timeStr())
 console.log(new Date().getTime())
-
-
-test('Simple Pass', () => {
-  expect(1).toEqual(1)
-})

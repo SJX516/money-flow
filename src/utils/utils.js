@@ -1,3 +1,30 @@
+class LogUtil {
+    static logLevel = 1;
+    static levelNames = ["debug", "info", "warn", "error"];
+
+    static debug(msg, ...optionalParams) {
+        this.log(0, msg, optionalParams)
+    }
+
+    static info(msg, ...optionalParams) {
+        this.log(1, msg, optionalParams)
+    }
+
+    static warn(msg, ...optionalParams) {
+        this.log(2, msg, optionalParams)
+    }
+
+    static error(msg, ...optionalParams) {
+        this.log(3, msg, optionalParams)
+    }
+
+    static log(level, msg, ...optionalParams) {
+        if(level >= this.logLevel) {
+            console.log(`[${this.levelNames[level]}] ${msg}`, optionalParams)
+        }
+    }
+}
+
 class MoneyUtil {
     static noValue(money) {
         return DataUtil.isEmpty(money) || DataUtil.notNumber(money) || money == 0
@@ -125,6 +152,14 @@ class DataUtil {
         return this.isNull(o) || isNaN(o)
     }
 
+    static safeGetNumber(o) {
+        if(this.notNumber(o)) {
+            return 0
+        } else {
+            return o
+        }
+    }
+
     static getPercent(a) {
         let temp = a * 100
         if(temp % 1 === 0) {
@@ -240,4 +275,4 @@ class TimeUtil {
     }
 }
 
-export { DataUtil, TimeUtil, MoneyUtil }
+export { LogUtil, DataUtil, TimeUtil, MoneyUtil }

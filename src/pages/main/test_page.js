@@ -1,14 +1,10 @@
-import React from 'react'
-import { Upload, Button, DatePicker, version, Row, Tag, Table } from "antd"
-import { Typography, Divider } from 'antd'
-import { IncomeExpenditureService } from '../../domain/service/income_expenditure_service'
-import { App } from '../..'
-import { IncomeExpenditureType } from '../../domain/entity/income_expenditure'
+import { Button, Divider, Row, Table, Tag, Typography } from "antd"
 import { Content } from 'antd/lib/layout/layout'
+import React from 'react'
+import { App } from '../../app'
 import { IncomeExpenditureVMService, InvestmentVMService } from '../../domain/service/view_model_service'
-import { MoneyUtil } from '../../utils/utils'
 
-const { Title, Paragraph, Text, Link } = Typography
+const { Text } = Typography
 
 class TestPage extends React.Component {
 

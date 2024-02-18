@@ -1,9 +1,53 @@
 import { DataUtil, MoneyUtil, TimeUtil } from "../../utils/utils"
 import { IncomeExpenditureDetail } from "../entity/income_expenditure"
+import { UserConfigStatus, UserConfigType } from "../entity/user_entity"
 import { IncomeExpenditureService } from "./income_expenditure_service"
 import InvestmentService from "./investment_service"
 
 class IncomeExpenditureVMService {
+
+    static getTypeTrees(configType, includeDisable=false) {
+        let topCodes = []
+        let result = []
+        function addTopTypes(type) {
+            if(!includeDisable && type.config.status == UserConfigStatus.Disabled) {
+                return
+            }
+            let parentCode = type.config.parent_code
+            if(DataUtil.isNull(parentCode)) {
+                topCodes.push(type.code)
+                result.push({
+                    "key": type.code,
+                    "entity": type,
+                    "childs": []
+                })
+            }
+        }
+        function addChildrenTypes(type) {
+            if(!includeDisable && type.config.status == UserConfigStatus.Disabled) {
+                return
+            }
+            let parentCode = type.config.parent_code
+            if(!DataUtil.isNull(parentCode)) {
+                let index = topCodes.indexOf(parentCode)
+                if(index < 0) {
+                    return
+                }
+                result[index]["childs"].push({
+                    "key": type.code,
+                    "entity": type
+                })
+            }
+        }
+        if(configType == UserConfigType.IncomeType) {
+            IncomeExpenditureService.getIncomeTypes().forEach(type => addTopTypes(type))
+            IncomeExpenditureService.getIncomeTypes().forEach(type => addChildrenTypes(type))
+        } else {
+            IncomeExpenditureService.getExpenditureTypes().forEach(type => addTopTypes(type))
+            IncomeExpenditureService.getExpenditureTypes().forEach(type => addChildrenTypes(type))
+        }
+        return result
+    }
 
     static queryMonthData(monthDate) {
         return this._calIncomeExpendData(IncomeExpenditureService.queryMonth(monthDate))
@@ -36,6 +80,10 @@ class IncomeExpenditureVMService {
         })
     }
 
+    /**
+     * @param {Array[IncomeExpenditureDetail]} details 
+     * @returns 
+     */
     static _calIncomeExpendData(details) {
         let result = {
             'income': {
@@ -49,7 +97,7 @@ class IncomeExpenditureVMService {
         }
         details.sort((a, b) => Math.abs(a.type.code) > Math.abs(b.type.code) ? 1 : -1).forEach(detail => {
             let obj = result['expend']
-            if (detail.type.code > 0) {
+            if (detail.type.isIncome()) {
                 obj = result['income']
             }
             obj.details.push(this._newEntityFromDetail(detail))
@@ -190,4 +238,4 @@ class InvestmentVMService {
     }
 }
 
-export { IncomeExpenditureVMService , InvestmentVMService}
+export { IncomeExpenditureVMService, InvestmentVMService }

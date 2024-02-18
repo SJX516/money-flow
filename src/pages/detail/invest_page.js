@@ -1,13 +1,13 @@
-import React from 'react'
-import { Table, Tag, Button, Layout, Input, Select, Space, Card, InputNumber, Row, Col, Divider, DatePicker, Popover, Typography } from "antd"
-import { DataUtil, MoneyUtil, TimeUtil } from '../../utils/utils';
-import InputWidget from './widget/input_widget';
+import { Col, Divider, Layout, Row, Space, Table, Tag, Typography } from "antd";
+import React from 'react';
 import InvestmentService from '../../domain/service/investment_service';
+import { InvestmentVMService } from '../../domain/service/view_model_service';
+import { DataUtil, MoneyUtil, TimeUtil } from '../../utils/utils';
 import { CusDialog } from './widget/cus_dialog';
+import InputWidget from './widget/input_widget';
 
-const { Option } = Select;
-const { Header, Content, Sider } = Layout;
-const { Title, Paragraph, Text, Link } = Typography;
+const { Content } = Layout;
+const { Text} = Typography;
 
 class InvestPage extends React.Component {
 
@@ -55,13 +55,13 @@ class InvestPage extends React.Component {
             key: 'paperProfitPercent',
             dataIndex: 'entity',
             render: (entity) => {
-                let paperProfitPercent = this.getPagerProfitProcent(entity)
+                let paperProfitPercent = InvestmentVMService.getPaperProfitPercent(entity)
                 return <Text type={MoneyUtil.getPercentColorType(paperProfitPercent)}>
                     {MoneyUtil.getPercentStr(paperProfitPercent)}</Text>
             },
             sorter: (a, b) => {
-                let apaperProfitPercent = this.getPagerProfitProcent(a.entity)
-                let bpaperProfitPercent = this.getPagerProfitProcent(b.entity)
+                let apaperProfitPercent = InvestmentVMService.getPaperProfitPercent(a.entity)
+                let bpaperProfitPercent = InvestmentVMService.getPaperProfitPercent(b.entity)
                 return DataUtil.compare(apaperProfitPercent, bpaperProfitPercent)
             }
         }, {
@@ -69,10 +69,10 @@ class InvestPage extends React.Component {
             key: 'paperProfit',
             dataIndex: 'entity',
             render: (entity) => {
-                return <Text>{MoneyUtil.getStr(this.getPagerProfit(entity))}</Text>
+                return <Text>{MoneyUtil.getStr(InvestmentVMService.getPaperProfit(entity))}</Text>
             },
             sorter: (a, b) => {
-                return MoneyUtil.compare(this.getPagerProfit(a.entity), this.getPagerProfit(b.entity))
+                return MoneyUtil.compare(InvestmentVMService.getPaperProfit(a.entity), InvestmentVMService.getPaperProfit(b.entity))
             }
         }, {
             title: '最新价值',
@@ -329,14 +329,6 @@ class InvestPage extends React.Component {
             }];
     }
 
-    getPagerProfit(entity) {
-        return entity.currentPrice?.money - entity.buySells?.totalMoney
-    }
-
-    getPagerProfitProcent(entity) {
-        return MoneyUtil.safeDivision(this.getPagerProfit(entity), entity.buySells?.totalMoney)
-    }
-
     getSellProfitPercent(entity) {
         return MoneyUtil.safeDivision(entity.profits?.totalMoney, Math.abs(entity.buySells?.totalSellMoney))
     }
@@ -430,7 +422,7 @@ class InvestPage extends React.Component {
             fundDatas.push({ key: productId, entity: detail })
 
             var product = productIdToProduct[productId]
-            var paperProfitPercent = this.getPagerProfitProcent(detail)
+            var paperProfitPercent = InvestmentVMService.getPaperProfitPercent(detail)
             var sellProfitPercent = this.getSellProfitPercent(detail)
             var fixVoteEntity = {
                 product: product,
@@ -497,9 +489,12 @@ class InvestPage extends React.Component {
                             required: true
                         }, {
                             name: "name",
+                            type: "input",
+                            hint: "名称",
                             required: true
                         }, {
                             name: "desc",
+                            type: "input",
                         }
                         ]} onSubmit={(s) => {
                             this.addProduct(s)
@@ -522,6 +517,7 @@ class InvestPage extends React.Component {
                             moneyPon: true
                         }, {
                             name: "desc",
+                            type: "input",
                             defaultValue: this.state.currentProduct?.desc,
                         }]}
                         onOk={(state) => this.editProduct(this.state.currentProduct, state)}

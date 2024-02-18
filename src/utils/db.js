@@ -2,11 +2,48 @@ import initSqlJs from "sql.js";
 /* eslint import/no-webpack-loader-syntax: off */
 import sqlWasm from "!!file-loader?name=sql-wasm-[contenthash].wasm!sql.js/dist/sql-wasm.wasm";
 import { message } from "antd";
+import { UserService } from "../domain/service/user_service";
+import { DataUtil, LogUtil } from "./utils";
+
+const LatestDbVersion = 1;
+const DbConfigTableName = "db_config";
+const KeyDbVersion = "db_version";
+
+const updateFuncs = {
+    0: v0Update
+}
+
+/**
+ * @param {DBHelper} helper 
+ */
+function v0Update(helper) {
+    LogUtil.info("数据库升级: v0 => v1");
+    helper.create("CREATE TABLE `db_config` (\
+        `id` INTEGER NOT NULL UNIQUE,\
+        `type` varchar(64) NOT NULL ,\
+        `value` varchar(64) NOT NULL ,\
+        PRIMARY KEY (`id` AUTOINCREMENT)\
+       )");
+    helper.create("CREATE TABLE `user_config` (\
+        `id` INTEGER NOT NULL UNIQUE,\
+        `gmt_create` datetime NOT NULL  ,\
+        `gmt_modified` datetime NOT NULL  ,\
+        `type` INTEGER NOT NULL ,\
+        `status` INTEGER NOT NULL ,\
+        `code` INTEGER NOT NULL ,\
+        `name` varchar(64) NOT NULL ,\
+        `parent_code` INTEGER,\
+        PRIMARY KEY (`id` AUTOINCREMENT)\
+       )");
+    helper.insert(DbConfigTableName, ['type', 'value'], [KeyDbVersion, "1"]);
+    UserService.initDefaultTypes();
+}
 
 class DBHelper {
     constructor() {
         this.db = null;
         this.actionCount = 0
+        this.initing = false;
     }
 
     async init(file) {
@@ -18,9 +55,15 @@ class DBHelper {
         })
         const Uints = new Uint8Array(fileResult);
         this.db = new SQL.Database(Uints);
+        this.applyUpdate();
     }
 
     async createDb() {
+        await this.createV0Db();
+        this.applyUpdate();
+    }
+
+    async createV0Db() {
         let SQL = await initSqlJs({ locateFile: () => sqlWasm });
         this.db = new SQL.Database();
         this.create("CREATE TABLE `data_summary` (\
@@ -31,7 +74,7 @@ class DBHelper {
             `time` datetime NOT NULL  ,\
             `money` INTEGER,\
             PRIMARY KEY (`id` AUTOINCREMENT)\
-           )")
+           )");
         this.create("CREATE TABLE `income_expenditure_detail` (\
             `id` INTEGER NOT NULL ,\
             `gmt_create` datetime NOT NULL,\
@@ -41,7 +84,7 @@ class DBHelper {
             `money` bigint unsigned NOT NULL,\
             `happen_time` datetime NOT NULL,\
             PRIMARY KEY (`id` AUTOINCREMENT)\
-        )")
+        )");
         this.create("CREATE TABLE `investment_detail` (\
             `id` INTEGER NOT NULL  ,\
             `gmt_create` datetime NOT NULL  ,\
@@ -54,7 +97,7 @@ class DBHelper {
             `buy_sell_id` INTEGER,\
             `record_type` int NOT NULL , `count` INT,\
             PRIMARY KEY (`id` AUTOINCREMENT)\
-           )")
+           )");
         this.create("CREATE TABLE `investment_product` (\
             `id` INTEGER NOT NULL  ,\
             `gmt_create` datetime NOT NULL  ,\
@@ -63,7 +106,40 @@ class DBHelper {
             `type` int NOT NULL  ,\
             `desc` varchar(64) NULL  , fix_vote INT,\
             PRIMARY KEY (`id` AUTOINCREMENT)\
-           )")
+           )");
+    }
+
+    getDbConfig() {
+        try {
+            return this.convert(this.selectAll(DbConfigTableName));
+        } catch {
+            return {};
+        }
+    }
+
+    applyUpdate() {
+        this.initing = true;
+        let config  = this.getDbConfig();
+        let currentVersion = 0
+        if(!DataUtil.isNull(config[KeyDbVersion])) {
+            currentVersion = parseInt(config[KeyDbVersion])
+        }
+        while(currentVersion < LatestDbVersion) {
+            updateFuncs[currentVersion](this);
+            currentVersion += 1;            
+        }
+        this.initing = false;
+    }
+
+    convert(content) {
+        let result = {};
+        if(content === undefined || content[0] === undefined) {
+            return result;
+        }
+        for (const data of content[0].values) {
+            result[data[1]] = data[2];
+        }
+        return result;
     }
 
     export() {
@@ -75,10 +151,11 @@ class DBHelper {
     }
 
     checkAutoSave() {
-        if(++this.actionCount > 20) {
-            message.info("自动触发保存")
-            this.actionCount = 0
-            this.export()
+        if(!this.initing && ++this.actionCount > 20) {
+            LogUtil.info("自动触发保存");
+            message.info("自动触发保存");
+            this.actionCount = 0;
+            this.export();
         }
     }
 
@@ -116,7 +193,7 @@ class DBHelper {
     }
 
     create(sql) {
-        console.log(sql)
+        LogUtil.debug(sql)
         this.db.run(sql)
     }
 
@@ -131,7 +208,7 @@ class DBHelper {
             valueDict['$' + cols[i] + i] = values[i]
         }
         sql += ") returning id"
-        console.log(sql + " " + JSON.stringify(valueDict))
+        LogUtil.debug(sql + " " + JSON.stringify(valueDict))
         var content = this.db.exec(sql, valueDict);
         this.checkAutoSave()
         return content[0].values[0][0]
@@ -144,7 +221,7 @@ class DBHelper {
         sql += data[0]
         sql += " where id=$id"
         valueDict['$id'] = id
-        console.log(sql + " " + JSON.stringify(valueDict))
+        LogUtil.debug(sql + " " + JSON.stringify(valueDict))
         this.checkAutoSave()
         this.db.run(sql, valueDict);
     }
@@ -158,10 +235,9 @@ class DBHelper {
         let data = this.genWhereSql(cols, values, ops)
         let valueDict = data[1]
         sql += data[0]
-        console.log(sql + " " + JSON.stringify(valueDict))
+        LogUtil.debug(sql + " " + JSON.stringify(valueDict))
         let content = this.db.exec(sql, valueDict)
         this.checkAutoSave()
-        console.log(JSON.stringify(content))
     }
 
     genWhereSql(cols, values, ops) {

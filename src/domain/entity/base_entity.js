@@ -4,4 +4,4 @@ class BaseEntity {
     gmtModified = null;
 }
 
-export {BaseEntity}
+export { BaseEntity };

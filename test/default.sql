@@ -46,4 +46,30 @@ CREATE TABLE `data_summary` (
  PRIMARY KEY (`id` AUTOINCREMENT)
 );
 
-INSERT INTO investment_product (gmt_create, gmt_modified, name, type) values (1, 2, 3, 4, 5);
+// version, 1
+CREATE TABLE `db_config` (
+ `id` INTEGER NOT NULL UNIQUE,
+ `gmt_create` datetime NOT NULL  ,
+ `gmt_modified` datetime NOT NULL  ,
+ `type` varchar(64) NOT NULL ,
+ `value` varchar(64) NOT NULL ,
+ PRIMARY KEY (`id` AUTOINCREMENT)
+);
+
+// type: 1 - account / 2 - ExpenditureType / 3 - IncomeType
+// type, code, name, parent_code
+// 1, 1, 账户1
+// 2, 1, 支出aa, null
+// 2, 2, 支出aa-1, 1
+// 3, 1, 收入aa, null
+CREATE TABLE `app_config` (
+ `id` INTEGER NOT NULL UNIQUE,
+ `gmt_create` datetime NOT NULL  ,
+ `gmt_modified` datetime NOT NULL  ,
+ `type` INTEGER NOT NULL ,
+ `code` INTEGER NOT NULL ,
+ `name` varchar(64) NOT NULL ,
+ `parent_code` INTEGER ,
+ PRIMARY KEY (`id` AUTOINCREMENT)
+);
+

@@ -12,11 +12,10 @@ class SummaryService {
 
     static queryMonths() {
         var monthDatas = SummaryData.queryAllMonthKey()
-        console.log(monthDatas)
         return monthDatas.map(d => {
             return TimeUtil.monthStr(d.time)
         })
     }
 }
 
-export {SummaryService}
+export { SummaryService }

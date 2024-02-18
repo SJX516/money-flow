@@ -1,19 +1,18 @@
-import React from 'react'
-import { Table, Tag, Button, Layout, Input, Select, Space, Card, InputNumber, Row, Col, Divider, DatePicker, Popover, Typography, message, List, Breadcrumb, Menu } from "antd"
-import { IncomeExpenditureService } from '../../domain/service/income_expenditure_service'
-import { IncomeExpenditureDetail, IncomeExpenditureType } from '../../domain/entity/income_expenditure'
-import { DataUtil, MoneyUtil, TimeUtil } from '../../utils/utils';
-import InputWidget from './widget/input_widget';
+import { Breadcrumb, Button, Col, Divider, Layout, Menu, Row, Space, Table, Tag, Typography, message } from "antd";
+import React from 'react';
+import { IncomeExpenditureType } from '../../domain/entity/income_expenditure';
+import { UserConfigType } from '../../domain/entity/user_entity';
+import { IncomeExpenditureService } from '../../domain/service/income_expenditure_service';
 import InvestmentService from '../../domain/service/investment_service';
-import { InvestmentRecordType, InvestmentType } from '../../domain/entity/investment';
-import { IncomeExpenditureVMService, InvestmentVMService } from '../../domain/service/view_model_service';
-import { UIUtils } from '../ui_utils';
 import { SummaryService } from '../../domain/service/summary_service';
+import { IncomeExpenditureVMService, InvestmentVMService } from '../../domain/service/view_model_service';
+import { DataUtil, MoneyUtil, TimeUtil } from '../../utils/utils';
+import { UIUtils } from '../ui_utils';
 import { CusDialog } from './widget/cus_dialog';
+import InputWidget from './widget/input_widget';
 
-const { Option } = Select;
-const { Header, Content, Sider } = Layout;
-const { Title, Paragraph, Text, Link } = Typography;
+const { Content, Sider } = Layout;
+const { Text } = Typography;
 
 class MonthPage extends React.Component {
 
@@ -79,6 +78,10 @@ class MonthPage extends React.Component {
             render: (_, record) => {
                 if(!DataUtil.isNull(record.entity.id)) {
                     return <Space size="middle">
+                        <a onClick={() => {
+                            console.log(record.entity)
+                            this.showDialog("modifyIncomeOrExpend", record.entity)
+                        }}>编辑</a>
                         <a onClick={() => {
                             this.deleteIncomeExpendDetail(record.entity.id)
                         }}>删除</a>
@@ -366,8 +369,11 @@ class MonthPage extends React.Component {
 
     getQoqPaperProfit(entity) {
         let lastMonthPaperProfit = InvestmentVMService.getPaperProfit(this._getLastMonthProductDetail(entity.info.productId))
+        // 当期账面利润
         let paperProfit = InvestmentVMService.getPaperProfit(entity)
-        return paperProfit - lastMonthPaperProfit
+        // 当期卖出所得利润
+        let sellProfit = DataUtil.safeGetNumber(entity.profits?.filterTotalMoney)
+        return sellProfit + paperProfit - lastMonthPaperProfit
     }
 
     //用这个月新增的账面利润 / 总投资额 得到这个月的收益率
@@ -389,8 +395,9 @@ class MonthPage extends React.Component {
         try {
             let money = InputWidget.getMoney(inputValues, "money")
             let date = inputValues.date
+            let typeCode = this._praseTypeCode(inputValues.treeType)
             IncomeExpenditureService.upsert(money,
-                IncomeExpenditureType.getByCode(inputValues.type), date, inputValues.desc ?? "")
+                IncomeExpenditureType.getByCode(typeCode), date, inputValues.desc ?? "")
             this.refreshPage()
             return true
         } catch (e) {
@@ -398,6 +405,15 @@ class MonthPage extends React.Component {
             alert(e)
             return false
         }
+    }
+
+    modifyIncomeOrExpend(inputValues) {
+        let detail = inputValues.extra
+        let typeCode = this._praseTypeCode(inputValues.treeType)
+        let desc = inputValues.desc ?? ""
+        IncomeExpenditureService.upsert(detail.money,
+            IncomeExpenditureType.getByCode(typeCode), detail.happenTime, desc, detail.id)
+        this.hideDialog()
     }
 
     addBuyInvest(s) {
@@ -474,13 +490,13 @@ class MonthPage extends React.Component {
             }
             map[year].push(element)
         })
-        console.log(map)
         return map
     }
 
-    showAddNewMonthDialog() {
+    showDialog(key, extra) {
         this.setState({
-            showDialog: "addNewMonth",
+            dialogKey: key,
+            dialogExtra: extra
         })
     }
 
@@ -501,7 +517,7 @@ class MonthPage extends React.Component {
 
     hideDialog() {
         this.setState({
-            showDialog: "",
+            dialogKey: "",
         })
     }
 
@@ -534,13 +550,11 @@ class MonthPage extends React.Component {
         }
         console.log("month page render ", currentMonthDate)
         //处理一些类型数据
-        let expendCode2Name = {}, incomeCode2Name = {}
-        IncomeExpenditureType.toList(IncomeExpenditureService.getExpenditureTypes()).forEach(type => {
-            expendCode2Name[type.code] = [type.name]
-        })
-        IncomeExpenditureType.toList(IncomeExpenditureService.getIncomeTypes()).forEach(type => {
-            incomeCode2Name[type.code] = [type.name]
-        })
+        let incomeTypes = IncomeExpenditureVMService.getTypeTrees(UserConfigType.IncomeType, false)
+        let expendTypes = IncomeExpenditureVMService.getTypeTrees(UserConfigType.ExpenditureType, false)
+        let incomeTreeDatas = this._getTypeTreeSelectDatas(incomeTypes)
+        let expendTreeDatas = this._getTypeTreeSelectDatas(expendTypes)
+
         let investProductCode2Name = {}, assetProductCode2Name = {}, debtProductCode2Name = {}
         InvestmentService.queryProducts().forEach(entity => {
             if (entity.type.isAsset()) {
@@ -660,8 +674,8 @@ class MonthPage extends React.Component {
                     <Divider orientation="center">新增收入/支出</Divider>
                     <Col span={8}>
                         <InputWidget title="收入" cfgs={[{
-                            name: "type",
-                            code2Name: incomeCode2Name,
+                            name: "treeType",
+                            treeData: incomeTreeDatas,
                             required: true
                         }, {
                             name: "money",
@@ -673,13 +687,14 @@ class MonthPage extends React.Component {
                             inMonth: currentMonthDate
                         }, {
                             name: "desc",
+                            type: "input"
                         }
                         ]} onSubmit={(s) => {
                             return this.insertData(s)
                         }} />
                         <InputWidget title="支出" cfgs={[{
-                            name: "type",
-                            code2Name: expendCode2Name,
+                            name: "treeType",
+                            treeData: expendTreeDatas,
                             required: true
                         }, {
                             name: "money",
@@ -691,6 +706,7 @@ class MonthPage extends React.Component {
                             inMonth: currentMonthDate
                         }, {
                             name: "desc",
+                            type: "input"
                         }
                         ]} onSubmit={(s) => {
                             return this.insertData(s)
@@ -717,6 +733,7 @@ class MonthPage extends React.Component {
                             required: true
                         }, {
                             name: "currentPrice",
+                            type: "money",
                             hint: "账面价值",
                             required: true,
                             moneyPon: true
@@ -739,6 +756,7 @@ class MonthPage extends React.Component {
                             required: true
                         }, {
                             name: "currentPrice",
+                            type: "money",
                             hint: "账面价值",
                             required: true,
                             moneyPon: false
@@ -777,11 +795,13 @@ class MonthPage extends React.Component {
                             moneyPon: true
                         }, {
                             name: "currentPrice",
+                            type: "money",
                             hint: "账面价值",
                             required: true,
                             moneyPon: true
                         }, {
                             name: "count",
+                            type: "money",
                             hint: "份数",
                             required: false,
                             moneyPon: true
@@ -801,6 +821,7 @@ class MonthPage extends React.Component {
                             required: true
                         }, {
                             name: "count",
+                            type: "money",
                             hint: "份数",
                             required: false,
                             moneyPon: true
@@ -811,16 +832,19 @@ class MonthPage extends React.Component {
                             moneyPon: true
                         }, {
                             name: "sellProfit",
+                            type: "money",
                             hint: "卖出利润-可负（二选一）",
                             required: false,
                             moneyPon: true
                         }, {
                             name: "currentPrice",
+                            type: "money",
                             hint: "账面价值",
                             required: true,
                             moneyPon: true
                         }, {
                             name: "currentProfit",
+                            type: "money",
                             hint: "账面利润-可负（二选一）",
                             required: false,
                             moneyPon: true
@@ -865,12 +889,12 @@ class MonthPage extends React.Component {
                                 </Breadcrumb>
                             </Col>
                             <Col span={12} align='right'>
-                                <Button onClick={() => this.showAddNewMonthDialog()}>新加月份</Button>
+                                <Button onClick={() => this.showDialog("addNewMonth", null)}>新加月份</Button>
                             </Col>
                         </Row>
                         {contentView}
                     </Layout>
-                    <CusDialog title="新加月份" visible={this.state.showDialog === "addNewMonth"}
+                    <CusDialog title="新加月份" visible={this.state.dialogKey === "addNewMonth"}
                         cfgs={[{
                             name: "date",
                             hint: "月份",
@@ -879,7 +903,57 @@ class MonthPage extends React.Component {
                         }]}
                         onOk={(state) => this.addNewMoth(state.date)}
                         onCancel={() => this.hideDialog()} />
+                    <CusDialog title="修改收入/支出" visible={this.state.dialogKey === "modifyIncomeOrExpend"}
+                        key={this.state.dialogExtra?.id}
+                        cfgs={[{
+                            name: "treeType",
+                            required: true,
+                            treeData: this.state.dialogExtra?.type.isIncome() ? incomeTreeDatas : expendTreeDatas,
+                            defaultValue: this._getTypeTreeCode(this.state.dialogExtra?.type)
+                        }, {
+                            name: "desc",
+                            type: "input",
+                            required: false,
+                            defaultValue: this.state.dialogExtra?.desc
+                        }]}
+                        extra={this.state.dialogExtra}
+                        onOk={(state) => this.modifyIncomeOrExpend(state)}
+                        onCancel={() => this.hideDialog()} />
                 </Layout>
+    }
+
+    /**
+     * @param {IncomeExpenditureType} type 
+     */
+    _getTypeTreeCode(type) {
+        if(DataUtil.isNull(type)) {
+            return null
+        }
+        return type.code + "___" + type.name
+    }
+
+    _praseTypeCode(treeCode) {
+        return parseInt(treeCode.split('___')[0])
+    }
+
+    _getTypeTreeSelectDatas(typesTree) {
+        let result = []
+        for (const type of typesTree) {
+            let group = {
+                "title": type.entity.name,
+                // 为了能够搜索，所以在 value 里面拼上 name
+                "value": this._getTypeTreeCode(type.entity),
+                "children": []
+            }
+            for (const child of type.childs) {
+                group.children.push({
+                    "title": child.entity.name,
+                    "value": this._getTypeTreeCode(child.entity)
+                })
+            }
+            result.push(group)
+        }
+        return result
     }
 
     createShowMoneyRowIfBiggerThan(title, money, valueRange = []) {
