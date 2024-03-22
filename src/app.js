@@ -11,7 +11,7 @@ class App {
 
     static _env = process.env.NODE_ENV;
 
-    static _version = "1.2.20240206";
+    static _version = "1.2.20240322";
 
     static isProduction() {
         return this._env === 'production';

@@ -22,8 +22,10 @@
   "scripts": {
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
-    "start": "export NODE_OPTIONS=--openssl-legacy-provider && craco start",
-    "build": "export NODE_OPTIONS=--openssl-legacy-provider && craco build",
+    "start_newer": "export NODE_OPTIONS=--openssl-legacy-provider && craco start",
+    "start": "craco start",
+    "build_newer": "export NODE_OPTIONS=--openssl-legacy-provider && craco build",
+    "build": "craco build",
     "test": "jest",
     "eject": "craco eject"
   },

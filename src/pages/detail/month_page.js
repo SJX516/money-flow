@@ -663,14 +663,14 @@ class MonthPage extends React.Component {
         let contentView = <Content className='Content'>
                 <Row>
                     <Divider orientation="center">使用步骤</Divider>
-                    <Space direction='vertical'>
+                    <Space direction='vertical' style={{ padding: '0px 0px 15px 0px'}}>
                         <Text>1. 还清各资产账户的借款（信用卡），记录资产现额</Text>
                         <Text>2. 记录 支付宝/微信 当月的 收入/支出</Text>
                         <Text>3. 记录 基金/股票 的 当月 买入/卖出 操作和当前现额等信息</Text>
                         <Text>4. 检查 总资产环比误差 信息（大于0表示：收入少了/支出多了/当前总资产多了），尽量保持500以下</Text>
                     </Space>
                 </Row>
-                <Row justify="space-between" style={{ padding: '10px 5px', backgroundColor: "#eee" }}>
+                <Row justify="space-between" style={{ padding: '0px 0px' }}>
                     <Divider orientation="center">新增收入/支出</Divider>
                     <Col span={8}>
                         <InputWidget title="收入" cfgs={[{
@@ -724,7 +724,7 @@ class MonthPage extends React.Component {
                         {this.createShowMoneyRowIfBiggerThan("总资产环比误差", currentMonthTotalMoney - lastMonthTotalMoney - currentMonthAddMoney, [500, 1000])}
                     </Col>
                 </Row>
-                <Row justify="space-between" style={{ padding: '10px 5px', backgroundColor: "#eee" }}>
+                <Row justify="space-between" style={{ padding: '0px 0px'}}>
                     <Divider orientation="center">资产/负债</Divider>
                     <Col span={8}>
                         <InputWidget title="资产" cfgs={[{
@@ -781,7 +781,7 @@ class MonthPage extends React.Component {
                             }} pagination={{ pageSize: 20 }} scroll={{ x: 800 }} sortDirections={['descend']} />
                     </Col>
                 </Row>
-                <Row style={{ padding: '10px 5px', backgroundColor: "#eee" }}>
+                <Row style={{ padding: '0px 0px 10px 0px'}}>
                     <Divider orientation="center">投资</Divider>
                     <Col span={10}>
                         <InputWidget title="买入投资" cfgs={[{

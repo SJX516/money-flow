@@ -44,7 +44,7 @@ class InitPage extends React.Component {
         return (
             <Content className='Content'>
                 <Divider orientation="center">版本：{App.getVersion()}</Divider>
-                <Row style={{ padding: '10px 50px 50px', backgroundColor: "#eee" }}>
+                <Row style={{ padding: '10px 50px 50px', backgroundColor: "#fff" }}>
                     <Col span={8} align='center'>
                         <Divider orientation="center">新建DB文件</Divider>
                         <Button onClick={() => this.create()}>新建</Button>
@@ -59,7 +59,7 @@ class InitPage extends React.Component {
                         <Button onClick={() => this.export()}>保存</Button>
                     </Col>
                 </Row>
-                <Row style={{ padding: '10px 50px 50px', backgroundColor: "#eee", margin: "10px 0", visibility: this.testViewVisibility }}>
+                <Row style={{ padding: '10px 50px 50px', backgroundColor: "#fff", margin: "10px 0", visibility: this.testViewVisibility }}>
                     <Divider orientation="center">测试按钮</Divider>
                     <Button onClick={() => this.click1()}>click1</Button>
                     <Button onClick={() => this.click2()}>click2</Button>

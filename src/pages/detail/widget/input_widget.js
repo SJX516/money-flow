@@ -239,7 +239,15 @@ class InputWidget extends React.Component {
                 }
             }
             if (this.props.onSubmit(this.state)) {
-                this.setState({})
+                let resetState = {}
+                for(let key of Object.keys(this.state)) {
+                    if(key === 'extra') {
+                        resetState[key] = this.state[key]
+                    } else {
+                        resetState[key] = null
+                    }
+                }
+                this.setState(resetState)
             }
         };
         let rows = []
