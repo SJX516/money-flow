@@ -41,19 +41,14 @@ class MainPage extends React.Component {
 
     render() {
         let navKey = this.state.navKey
+        if (DB_INIT !== true) {
+            navKey = 'init'
+        }
         let subPage = null
-        if (navKey === 'init' || DB_INIT !== true) {
-            if(navKey !== 'init') {
-                this.state.navKey = "init"
-                message.error('请先加载DB文件')
-            }
+        if (navKey === 'init') {
             subPage = <InitPage onDbReady={() => {
-                if(App.isProduction()) {
-                    this.state.navKey = "by_month"
-                } else {
-                    this.state.navKey = "user_config"
-                }
-                this.refreshPage()
+                let newKey = App.isProduction() ? "by_month" : "user_config"
+                this.setState({ navKey: newKey })
             }} />
         } else {
             if (navKey === 'test') {
@@ -75,7 +70,7 @@ class MainPage extends React.Component {
                 <Header className="header">
                     <Menu theme="dark" mode="horizontal" items={this.navItems} selectedKeys={[navKey]}
                         onSelect={(item) => {
-                            this.setState(() => this.state.navKey = item.key)
+                            this.setState({ navKey: item.key })
                         }} />
                 </Header>
                 {subPage}

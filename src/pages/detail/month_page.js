@@ -1,5 +1,6 @@
 import { Breadcrumb, Button, Col, Divider, Layout, Menu, Row, Space, Table, Tag, Typography, message } from "antd";
 import React from 'react';
+import { Pie } from '@ant-design/charts';
 import { IncomeExpenditureType } from '../../domain/entity/income_expenditure';
 import { UserConfigType } from '../../domain/entity/user_entity';
 import { IncomeExpenditureService } from '../../domain/service/income_expenditure_service';
@@ -18,7 +19,10 @@ class MonthPage extends React.Component {
 
     constructor(props) {
         super(props)
-        this.state = {}
+        this.state = {
+            selectedCategory: null,
+            subChartData: []
+        }
 
         this.incomeExpendColumns = [{
             title: '名称',
@@ -76,7 +80,7 @@ class MonthPage extends React.Component {
             title: '操作',
             key: 'action',
             render: (_, record) => {
-                if(!DataUtil.isNull(record.entity.id)) {
+                if (!DataUtil.isNull(record.entity.id)) {
                     return <Space size="middle">
                         <a onClick={() => {
                             console.log(record.entity)
@@ -87,7 +91,7 @@ class MonthPage extends React.Component {
                         }}>删除</a>
                     </Space>
                 }
-            }   
+            }
         },]
 
         this.assetDebtColumns = [{
@@ -104,7 +108,7 @@ class MonthPage extends React.Component {
             render: (entity) => {
                 return <Text>{entity.info.productName}</Text>
             },
-        },  {
+        }, {
             title: '最新时间',
             key: 'happenTime',
             dataIndex: 'entity',
@@ -382,9 +386,9 @@ class MonthPage extends React.Component {
     }
 
     _getLastMonthProductDetail(productId) {
-        for(let item of [this.lastMonthAllInvestData['fund'], this.lastMonthAllInvestData['stock'], 
-            this.lastMonthAllInvestData['asset'], this.lastMonthAllInvestData['debt']]) {
-            if(productId in item['products']) {
+        for (let item of [this.lastMonthAllInvestData['fund'], this.lastMonthAllInvestData['stock'],
+        this.lastMonthAllInvestData['asset'], this.lastMonthAllInvestData['debt']]) {
+            if (productId in item['products']) {
                 return item['products'][productId]
             }
         }
@@ -509,7 +513,7 @@ class MonthPage extends React.Component {
                 this.hideDialog()
             } else {
                 SummaryService.addMonth(d)
-                this.state.sideKey = TimeUtil.monthStr(d)
+                this.setState({ sideKey: TimeUtil.monthStr(d) })
                 this.hideDialog()
             }
         }
@@ -540,10 +544,11 @@ class MonthPage extends React.Component {
                 }),
             };
         })
-        if (DataUtil.isNull(this.state.sideKey)) {
-            this.state.sideKey = lastMonth
+        let sideKey = this.state.sideKey
+        if (DataUtil.isNull(sideKey)) {
+            sideKey = lastMonth
         }
-        this.monthDate = new Date(this.state.sideKey)
+        this.monthDate = new Date(sideKey)
         let currentMonthDate = this.monthDate
         if (DataUtil.notNumber(currentMonthDate)) {
             return <Content />
@@ -570,6 +575,9 @@ class MonthPage extends React.Component {
         let monthData = IncomeExpenditureVMService.queryMonthData(currentMonthDate)
         let totalIncome = monthData['income']['total'], totalExpend = monthData['expend']['total']
 
+        // 计算支出图表数据
+        let chartData = this.calculateChartData(monthData['expend']['details'])
+
         //处理资产、负债、投资的一些总数据
         let allInvestData = InvestmentVMService.queryMonthData(currentMonthDate)
         let passiveIncomeSummary = this._getPassiveIncomeSummary(allInvestData)
@@ -584,24 +592,34 @@ class MonthPage extends React.Component {
         let lastMonthTotalMoney = this._getTotalMoney(this.lastMonthAllInvestData)
         let currentMonthAddMoney = totalIncome + totalExpend + passiveIncomeSummary['total'] + passiveExpendSummary['total']
 
-        incomeExpendData.push({key: "主动收入", entity: this.newEntity(null, "主动收入", totalIncome, null, monthData['income']['details'])})    
-        incomeExpendData.push({key: "被动收入", entity: this.newEntity(null, "被动收入",  passiveIncomeSummary['total'], 
-            null, passiveIncomeSummary['details'])})
-        incomeExpendData.push({key: "主动支出", entity: this.newEntity(null, "主动支出", totalExpend, null, monthData['expend']['details'])})
-        incomeExpendData.push({key: "被动支出", entity: this.newEntity(null, "被动支出", passiveExpendSummary['total'], 
-            null, passiveExpendSummary['details'])})
-        incomeExpendData.push({key: "新增现金", entity: this.newEntity(null, "新增现金", currentMonthAddMoney, 
-            null)})
-        incomeExpendData.push({key: "上期总资产", entity: this.newEntity(null, "上期总资产", lastMonthTotalMoney, 
-            null)})
+        incomeExpendData.push({ key: "主动收入", entity: this.newEntity(null, "主动收入", totalIncome, null, monthData['income']['details']) })
+        incomeExpendData.push({
+            key: "被动收入", entity: this.newEntity(null, "被动收入", passiveIncomeSummary['total'],
+                null, passiveIncomeSummary['details'])
+        })
+        incomeExpendData.push({ key: "主动支出", entity: this.newEntity(null, "主动支出", totalExpend, null, monthData['expend']['details']) })
+        incomeExpendData.push({
+            key: "被动支出", entity: this.newEntity(null, "被动支出", passiveExpendSummary['total'],
+                null, passiveExpendSummary['details'])
+        })
+        incomeExpendData.push({
+            key: "新增现金", entity: this.newEntity(null, "新增现金", currentMonthAddMoney,
+                null)
+        })
+        incomeExpendData.push({
+            key: "上期总资产", entity: this.newEntity(null, "上期总资产", lastMonthTotalMoney,
+                null)
+        })
 
         let totalMoneyEntitys = []
         totalMoneyEntitys.push(this.newEntity(null, "资产总额", allInvestData['asset']['totalMoneys'][0], null))
         totalMoneyEntitys.push(this.newEntity(null, "负债总额", allInvestData['debt']['totalMoneys'][0], null))
         totalMoneyEntitys.push(this.newEntity(null, "投资总额", allInvestData['fund']['totalMoneys'][1], `账面价值：${MoneyUtil.getStr(allInvestData['fund']['totalMoneys'][0])}`))
         totalMoneyEntitys.push(this.newEntity(null, "股票总额", allInvestData['stock']['totalMoneys'][1], `账面价值：${MoneyUtil.getStr(allInvestData['stock']['totalMoneys'][0])}`))
-        incomeExpendData.push({key: "当前总资产", entity: this.newEntity(null, "当前总资产", currentMonthTotalMoney, 
-            null, totalMoneyEntitys)})
+        incomeExpendData.push({
+            key: "当前总资产", entity: this.newEntity(null, "当前总资产", currentMonthTotalMoney,
+                null, totalMoneyEntitys)
+        })
 
         let subIncomeExpendRowRender = (record, index) => {
             const data = [];
@@ -611,7 +629,7 @@ class MonthPage extends React.Component {
                     entity: ele
                 });
             })
-            return <Table columns={this.subIncomeExpendColumns} dataSource={data} pagination={false} sortDirections={['descend']}/>;
+            return <Table columns={this.subIncomeExpendColumns} dataSource={data} pagination={false} sortDirections={['descend']} />;
         }
         let subIncomeExpendRowExpandable = (record) => {
             return !DataUtil.isNull(record.entity.child) &&
@@ -661,272 +679,390 @@ class MonthPage extends React.Component {
         }
 
         let contentView = <Content className='Content'>
-                <Row>
-                    <Divider orientation="center">使用步骤</Divider>
-                    <Space direction='vertical' style={{ padding: '0px 0px 15px 0px'}}>
-                        <Text>1. 还清各资产账户的借款（信用卡），记录资产现额</Text>
-                        <Text>2. 记录 支付宝/微信 当月的 收入/支出</Text>
-                        <Text>3. 记录 基金/股票 的 当月 买入/卖出 操作和当前现额等信息</Text>
-                        <Text>4. 检查 总资产环比误差 信息（大于0表示：收入少了/支出多了/当前总资产多了），尽量保持500以下</Text>
-                    </Space>
-                </Row>
-                <Row justify="space-between" style={{ padding: '0px 0px' }}>
-                    <Divider orientation="center">新增收入/支出</Divider>
-                    <Col span={8}>
-                        <InputWidget title="收入" cfgs={[{
-                            name: "treeType",
-                            treeData: incomeTreeDatas,
-                            required: true
-                        }, {
-                            name: "money",
-                            required: true,
-                            moneyPon: true
-                        }, {
-                            name: "date",
-                            required: true,
-                            inMonth: currentMonthDate
-                        }, {
-                            name: "desc",
-                            type: "input"
-                        }
-                        ]} onSubmit={(s) => {
-                            return this.insertData(s)
-                        }} />
-                        <InputWidget title="支出" cfgs={[{
-                            name: "treeType",
-                            treeData: expendTreeDatas,
-                            required: true
-                        }, {
-                            name: "money",
-                            required: true,
-                            moneyPon: false
-                        }, {
-                            name: "date",
-                            required: true,
-                            inMonth: currentMonthDate
-                        }, {
-                            name: "desc",
-                            type: "input"
-                        }
-                        ]} onSubmit={(s) => {
-                            return this.insertData(s)
-                        }} />
-                    </Col>
-                    <Col span={16}>
-                        <Table columns={this.incomeExpendColumns} dataSource={incomeExpendData}
-                            expandable={{
-                                expandedRowRender: subIncomeExpendRowRender,
-                                rowExpandable: subIncomeExpendRowExpandable
-                            }} pagination={{ pageSize: 20 }} sortDirections={['descend']} />
-                        <Divider orientation="center">指标</Divider>
-                        {UIUtils.createShowTextRow("被动收入/支出（财富自由率）", DataUtil.getPercent(passiveIncomeSummary['total'] / Math.abs(totalExpend + passiveExpendSummary['total'])))}
-                        {UIUtils.createShowTextRow("被动收入/主动收入", DataUtil.getPercent(passiveIncomeSummary['total'] / totalIncome))}
-                        {this.createShowMoneyRowIfBiggerThan("总资产环比误差", currentMonthTotalMoney - lastMonthTotalMoney - currentMonthAddMoney, [500, 1000])}
-                    </Col>
-                </Row>
-                <Row justify="space-between" style={{ padding: '0px 0px'}}>
-                    <Divider orientation="center">资产/负债</Divider>
-                    <Col span={8}>
-                        <InputWidget title="资产" cfgs={[{
-                            name: "type",
-                            code2Name: assetProductCode2Name,
-                            required: true
-                        }, {
-                            name: "currentPrice",
-                            type: "money",
-                            hint: "账面价值",
-                            required: true,
-                            moneyPon: true
-                        }, {
-                            name: "money",
-                            hint: "收益",
-                            moneyPon: true
-                        }, {
-                            name: "date",
-                            required: true,
-                            inMonth: currentMonthDate
-                        }
-                        ]} onSubmit={(s) => {
-                            return this.addAssetDebtProfit(s)
-                        }} />
+            <Row>
+                <Divider orientation="center">使用步骤</Divider>
+                <Space direction='vertical' style={{ padding: '0px 0px 15px 0px' }}>
+                    <Text>1. 还清各资产账户的借款（信用卡），记录资产现额</Text>
+                    <Text>2. 记录 支付宝/微信 当月的 收入/支出</Text>
+                    <Text>3. 记录 基金/股票 的 当月 买入/卖出 操作和当前现额等信息</Text>
+                    <Text>4. 检查 总资产环比误差 信息（大于0表示：收入少了/支出多了/当前总资产多了），尽量保持500以下</Text>
+                </Space>
+            </Row>
+            <Row justify="space-between" style={{ padding: '0px 0px' }}>
+                <Divider orientation="center">新增收入/支出</Divider>
+                <Col span={8}>
+                    <InputWidget title="收入" cfgs={[{
+                        name: "treeType",
+                        treeData: incomeTreeDatas,
+                        required: true
+                    }, {
+                        name: "money",
+                        required: true,
+                        moneyPon: true
+                    }, {
+                        name: "date",
+                        required: true,
+                        inMonth: currentMonthDate
+                    }, {
+                        name: "desc",
+                        type: "input"
+                    }
+                    ]} onSubmit={(s) => {
+                        return this.insertData(s)
+                    }} />
+                    <InputWidget title="支出" cfgs={[{
+                        name: "treeType",
+                        treeData: expendTreeDatas,
+                        required: true
+                    }, {
+                        name: "money",
+                        required: true,
+                        moneyPon: false
+                    }, {
+                        name: "date",
+                        required: true,
+                        inMonth: currentMonthDate
+                    }, {
+                        name: "desc",
+                        type: "input"
+                    }
+                    ]} onSubmit={(s) => {
+                        return this.insertData(s)
+                    }} />
+                </Col>
+                <Col span={16}>
+                    <Table columns={this.incomeExpendColumns} dataSource={incomeExpendData}
+                        expandable={{
+                            expandedRowRender: subIncomeExpendRowRender,
+                            rowExpandable: subIncomeExpendRowExpandable
+                        }} pagination={{ pageSize: 20 }} sortDirections={['descend']} />
+                    <Divider orientation="center">指标</Divider>
+                    {UIUtils.createShowTextRow("被动收入/支出（财富自由率）", DataUtil.getPercent(passiveIncomeSummary['total'] / Math.abs(totalExpend + passiveExpendSummary['total'])))}
+                    {UIUtils.createShowTextRow("被动收入/主动收入", DataUtil.getPercent(passiveIncomeSummary['total'] / totalIncome))}
+                    {this.createShowMoneyRowIfBiggerThan("总资产环比误差", currentMonthTotalMoney - lastMonthTotalMoney - currentMonthAddMoney, [500, 1000])}
+                </Col>
+            </Row>
+            <Row>
+                <Divider orientation="center">支出统计</Divider>
+                <Col span={12}>
+                    <Pie
+                        data={chartData || []}
+                        angleField='value'
+                        colorField='type'
+                        radius={0.8}
+                        innerRadius={0.6}
+                        label={{
+                            type: 'inner',
+                            offset: '-50%',
+                            style: {
+                                fill: 'black',
+                                textAlign: 'center',
+                            },
+                            formatter: (item) => {
+                                return item.type + ": " + MoneyUtil.getPercentStr(item.percent)
+                            },
+                            autoRotate: false,
+                        }}
+                        statistic={{
+                            title: {
+                                customHtml: (container, view, datum) => {
+                                    return datum ? datum.type : '总支出';
+                                },
+                            },
+                            content: {
+                                customHtml: (container, view, datum, data) => {
+                                    const total = data.reduce((r, d) => r + d.value, 0);
+                                    return datum ? MoneyUtil.getStr(datum.value) : MoneyUtil.getStr(total);
+                                },
+                            },
+                        }}
+                        interactions={[
+                            {
+                                type: 'element-selected',
+                            },
+                            {
+                                type: 'element-active',
+                            },
+                            {
+                                type: 'pie-statistic-active',
+                            },
+                        ]}
+                        onReady={(plot) => {
+                            plot.on('element:click', (event) => {
+                                this.handleChartClick(event)
+                            })
+                        }}
+                    />
+                </Col>
+                <Col span={12}>
+                    {this.state.selectedCategory && (
+                        <div>
+                            <Pie
+                                data={this.state.subChartData || []}
+                                angleField='value'
+                                colorField='type'
+                                radius={0.8}
+                                innerRadius={0.6}
+                                label={{
+                                    type: 'inner',
+                                    offset: '-50%',
+                                    style: {
+                                        fill: 'black',
+                                        textAlign: 'center',
+                                    },
+                                    formatter: (item) => {
+                                        return item.type + ": " + MoneyUtil.getPercentStr(item.percent)
+                                    },
+                                    autoRotate: false,
+                                }}
+                                statistic={{
+                                    title: {
+                                        customHtml: (container, view, datum, data) => {
+                                            const total = data.reduce((r, d) => r + d.value, 0);
+                                            const title =  datum ? datum.type : '明细';
+                                            const money = datum ? MoneyUtil.getStr(datum.value) : MoneyUtil.getStr(total);
+                                            return (
+                                                <div>
+                                                    <div style={{ marginBottom: 10, fontWeight: 'bold'}}>{money}</div>
+                                                    <div style={{ fontWeight: 'bold' }}>{title}</div>
+                                                </div>
+                                            );
+                                        },
+                                    },
+                                    content: {
+                                        customHtml: (container, view, datum, data) => {
+                                            if (datum) {
+                                                const details = datum.details || [];
+                                                return (<div>
+                                                    {details.map((d, i) => (
+                                                        <div key={i} style={{ marginTop: 6, fontSize: 14, fontWeight: 'normal'}}>
+                                                            {MoneyUtil.getStr(d.money)} {d.desc || ''}
+                                                        </div>
+                                                    ))}
+                                                </div>)
+                                            }
+                                        },
+                                    },
+                                }}
+                                interactions={[
+                                    {
+                                        type: 'element-selected',
+                                    },
+                                    {
+                                        type: 'element-active',
+                                    },
+                                    {
+                                        type: 'pie-statistic-active',
+                                    },
+                                ]}
+                            />
+                        </div>
+                    )}
+                </Col>
+            </Row>
+            <Row justify="space-between" style={{ padding: '0px 0px' }}>
+                <Divider orientation="center">资产/负债</Divider>
+                <Col span={8}>
+                    <InputWidget title="资产" cfgs={[{
+                        name: "type",
+                        code2Name: assetProductCode2Name,
+                        required: true
+                    }, {
+                        name: "currentPrice",
+                        type: "money",
+                        hint: "账面价值",
+                        required: true,
+                        moneyPon: true
+                    }, {
+                        name: "money",
+                        hint: "收益",
+                        moneyPon: true
+                    }, {
+                        name: "date",
+                        required: true,
+                        inMonth: currentMonthDate
+                    }
+                    ]} onSubmit={(s) => {
+                        return this.addAssetDebtProfit(s)
+                    }} />
 
-                        <InputWidget title="负债" cfgs={[{
-                            name: "type",
-                            code2Name: debtProductCode2Name,
-                            required: true
-                        }, {
-                            name: "currentPrice",
-                            type: "money",
-                            hint: "账面价值",
-                            required: true,
-                            moneyPon: false
-                        }, {
-                            name: "money",
-                            hint: "亏损",
-                            moneyPon: false
-                        }, {
-                            name: "date",
-                            required: true,
-                            inMonth: currentMonthDate
-                        }
-                        ]} onSubmit={(s) => {
-                            return this.addAssetDebtProfit(s)
-                        }} />
-                    </Col>
-                    <Col span={16}>
-                        <Table columns={this.assetDebtColumns} dataSource={assetDebtDatas}
-                            expandable={{
-                                expandedRowRender: subAssetDebtRowRender,
-                                rowExpandable: subAssetDebtRowExpandable
-                            }} pagination={{ pageSize: 20 }} scroll={{ x: 800 }} sortDirections={['descend']} />
-                    </Col>
-                </Row>
-                <Row style={{ padding: '0px 0px 10px 0px'}}>
-                    <Divider orientation="center">投资</Divider>
-                    <Col span={10}>
-                        <InputWidget title="买入投资" cfgs={[{
-                            name: "type",
-                            code2Name: investProductCode2Name,
-                            required: true
-                        }, {
-                            name: "money",
-                            hint: "花费金额",
-                            required: true,
-                            moneyPon: true
-                        }, {
-                            name: "currentPrice",
-                            type: "money",
-                            hint: "账面价值",
-                            required: true,
-                            moneyPon: true
-                        }, {
-                            name: "count",
-                            type: "money",
-                            hint: "份数",
-                            required: false,
-                            moneyPon: true
-                        }, {
-                            name: "date",
-                            required: true,
-                            inMonth: currentMonthDate
-                        }
-                        ]} onSubmit={(s) => {
-                            return this.addBuyInvest(s)
-                        }} />
-                    </Col>
-                    <Col span={14}>
+                    <InputWidget title="负债" cfgs={[{
+                        name: "type",
+                        code2Name: debtProductCode2Name,
+                        required: true
+                    }, {
+                        name: "currentPrice",
+                        type: "money",
+                        hint: "账面价值",
+                        required: true,
+                        moneyPon: false
+                    }, {
+                        name: "money",
+                        hint: "亏损",
+                        moneyPon: false
+                    }, {
+                        name: "date",
+                        required: true,
+                        inMonth: currentMonthDate
+                    }
+                    ]} onSubmit={(s) => {
+                        return this.addAssetDebtProfit(s)
+                    }} />
+                </Col>
+                <Col span={16}>
+                    <Table columns={this.assetDebtColumns} dataSource={assetDebtDatas}
+                        expandable={{
+                            expandedRowRender: subAssetDebtRowRender,
+                            rowExpandable: subAssetDebtRowExpandable
+                        }} pagination={{ pageSize: 20 }} scroll={{ x: 800 }} sortDirections={['descend']} />
+                </Col>
+            </Row>
+            <Row style={{ padding: '0px 0px 10px 0px' }}>
+                <Divider orientation="center">投资</Divider>
+                <Col span={10}>
+                    <InputWidget title="买入投资" cfgs={[{
+                        name: "type",
+                        code2Name: investProductCode2Name,
+                        required: true
+                    }, {
+                        name: "money",
+                        hint: "花费金额",
+                        required: true,
+                        moneyPon: true
+                    }, {
+                        name: "currentPrice",
+                        type: "money",
+                        hint: "账面价值",
+                        required: true,
+                        moneyPon: true
+                    }, {
+                        name: "count",
+                        type: "money",
+                        hint: "份数",
+                        required: false,
+                        moneyPon: true
+                    }, {
+                        name: "date",
+                        required: true,
+                        inMonth: currentMonthDate
+                    }
+                    ]} onSubmit={(s) => {
+                        return this.addBuyInvest(s)
+                    }} />
+                </Col>
+                <Col span={14}>
                     <InputWidget title="卖出投资" cfgs={[{
-                            name: "type",
-                            code2Name: investProductCode2Name,
-                            required: true
-                        }, {
-                            name: "count",
-                            type: "money",
-                            hint: "份数",
-                            required: false,
-                            moneyPon: true
-                        }, {
-                            name: "money",
-                            hint: "卖出所得金额",
-                            required: true,
-                            moneyPon: true
-                        }, {
-                            name: "sellProfit",
-                            type: "money",
-                            hint: "卖出利润-可负（二选一）",
-                            required: false,
-                            moneyPon: true
-                        }, {
-                            name: "currentPrice",
-                            type: "money",
-                            hint: "账面价值",
-                            required: true,
-                            moneyPon: true
-                        }, {
-                            name: "currentProfit",
-                            type: "money",
-                            hint: "账面利润-可负（二选一）",
-                            required: false,
-                            moneyPon: true
-                        }, {
-                            name: "date",
-                            required: true,
-                            inMonth: currentMonthDate
-                        }
-                        ]} onSubmit={(s) => {
-                            return this.addSellInvest(s)
-                        }} />
+                        name: "type",
+                        code2Name: investProductCode2Name,
+                        required: true
+                    }, {
+                        name: "count",
+                        type: "money",
+                        hint: "份数",
+                        required: false,
+                        moneyPon: true
+                    }, {
+                        name: "money",
+                        hint: "卖出所得金额",
+                        required: true,
+                        moneyPon: true
+                    }, {
+                        name: "sellProfit",
+                        type: "money",
+                        hint: "卖出利润-可负（二选一）",
+                        required: false,
+                        moneyPon: true
+                    }, {
+                        name: "currentPrice",
+                        type: "money",
+                        hint: "账面价值",
+                        required: true,
+                        moneyPon: true
+                    }, {
+                        name: "currentProfit",
+                        type: "money",
+                        hint: "账面利润-可负（二选一）",
+                        required: false,
+                        moneyPon: true
+                    }, {
+                        name: "date",
+                        required: true,
+                        inMonth: currentMonthDate
+                    }
+                    ]} onSubmit={(s) => {
+                        return this.addSellInvest(s)
+                    }} />
+                </Col>
+            </Row>
+            <Table columns={this.investColumns} dataSource={stockData} expandable={{
+                expandedRowRender: subInvestRowRender,
+                rowExpandable: subInvestRowExpandable
+            }} pagination={{ pageSize: 20 }} scroll={{ x: 1500 }} sortDirections={['descend']} />
+            <Table columns={this.investColumns} dataSource={fundData} expandable={{
+                expandedRowRender: subInvestRowRender,
+                rowExpandable: subInvestRowExpandable
+            }} pagination={{ pageSize: 20 }} scroll={{ x: 1500 }} sortDirections={['descend']} />
+        </Content>
+
+        return <Layout>
+            <Sider width={200}>
+                <Menu
+                    className='Menu'
+                    mode="inline"
+                    openKeys={openKeys}
+                    selectedKeys={[sideKey]}
+                    items={siderItems}
+                    onSelect={(item) => {
+                        this.setState({ sideKey: item.key })
+                    }}
+                />
+            </Sider>
+            <Layout className='Layout-inner'>
+                <Row align='middle'>
+                    <Col flex="auto">
+                        <Breadcrumb>
+                            <Breadcrumb.Item>{this.state.sideKey}</Breadcrumb.Item>
+                        </Breadcrumb>
+                    </Col>
+                    <Col span={12} align='right'>
+                        <Button onClick={() => this.showDialog("addNewMonth", null)}>新加月份</Button>
                     </Col>
                 </Row>
-                <Table columns={this.investColumns} dataSource={stockData} expandable={{
-                            expandedRowRender: subInvestRowRender,
-                            rowExpandable: subInvestRowExpandable
-                        }} pagination={{ pageSize: 20 }} scroll={{ x: 1500 }} sortDirections={['descend']} />
-                <Table columns={this.investColumns} dataSource={fundData} expandable={{
-                            expandedRowRender: subInvestRowRender,
-                            rowExpandable: subInvestRowExpandable
-                        }} pagination={{ pageSize: 20 }} scroll={{ x: 1500 }} sortDirections={['descend']} />
-            </Content>
-        
-        return <Layout>
-                    <Sider width={200}>
-                        <Menu
-                            className='Menu'
-                            mode="inline"
-                            openKeys={openKeys}
-                            selectedKeys={[this.state.sideKey]}
-                            items={siderItems}
-                            onSelect={(item) => {
-                                this.setState(() => this.state.sideKey = item.key)
-                            }}
-                        />
-                    </Sider>
-                    <Layout className='Layout-inner'>
-                        <Row align='middle'>
-                            <Col flex="auto">
-                                <Breadcrumb>
-                                    <Breadcrumb.Item>{this.state.sideKey}</Breadcrumb.Item>
-                                </Breadcrumb>
-                            </Col>
-                            <Col span={12} align='right'>
-                                <Button onClick={() => this.showDialog("addNewMonth", null)}>新加月份</Button>
-                            </Col>
-                        </Row>
-                        {contentView}
-                    </Layout>
-                    <CusDialog title="新加月份" visible={this.state.dialogKey === "addNewMonth"}
-                        cfgs={[{
-                            name: "date",
-                            hint: "月份",
-                            picker: "month",
-                            defaultValue: new Date()
-                        }]}
-                        onOk={(state) => this.addNewMoth(state.date)}
-                        onCancel={() => this.hideDialog()} />
-                    <CusDialog title="修改收入/支出" visible={this.state.dialogKey === "modifyIncomeOrExpend"}
-                        key={this.state.dialogExtra?.id}
-                        cfgs={[{
-                            name: "treeType",
-                            required: true,
-                            treeData: this.state.dialogExtra?.type.isIncome() ? incomeTreeDatas : expendTreeDatas,
-                            defaultValue: this._getTypeTreeCode(this.state.dialogExtra?.type)
-                        }, {
-                            name: "desc",
-                            type: "input",
-                            required: false,
-                            defaultValue: this.state.dialogExtra?.desc
-                        }]}
-                        extra={this.state.dialogExtra}
-                        onOk={(state) => this.modifyIncomeOrExpend(state)}
-                        onCancel={() => this.hideDialog()} />
-                </Layout>
+                {contentView}
+            </Layout>
+            <CusDialog title="新加月份" visible={this.state.dialogKey === "addNewMonth"}
+                cfgs={[{
+                    name: "date",
+                    hint: "月份",
+                    picker: "month",
+                    defaultValue: new Date()
+                }]}
+                onOk={(state) => this.addNewMoth(state.date)}
+                onCancel={() => this.hideDialog()} />
+            <CusDialog title="修改收入/支出" visible={this.state.dialogKey === "modifyIncomeOrExpend"}
+                key={this.state.dialogExtra?.id}
+                cfgs={[{
+                    name: "treeType",
+                    required: true,
+                    treeData: this.state.dialogExtra?.type.isIncome() ? incomeTreeDatas : expendTreeDatas,
+                    defaultValue: this._getTypeTreeCode(this.state.dialogExtra?.type)
+                }, {
+                    name: "desc",
+                    type: "input",
+                    required: false,
+                    defaultValue: this.state.dialogExtra?.desc
+                }]}
+                extra={this.state.dialogExtra}
+                onOk={(state) => this.modifyIncomeOrExpend(state)}
+                onCancel={() => this.hideDialog()} />
+        </Layout>
     }
 
     /**
      * @param {IncomeExpenditureType} type 
      */
     _getTypeTreeCode(type) {
-        if(DataUtil.isNull(type)) {
+        if (DataUtil.isNull(type)) {
             return null
         }
         return type.code + "___" + type.name
@@ -990,7 +1126,7 @@ class MonthPage extends React.Component {
         return UIUtils.createShowTextRow(title, MoneyUtil.getStr(money), "")
     }
 
-    newEntity(happenTime, title, money, desc, child=[]) {
+    newEntity(happenTime, title, money, desc, child = []) {
         return {
             happenTime: happenTime,
             title: title,
@@ -1008,11 +1144,11 @@ class MonthPage extends React.Component {
         return totalAssetMoneys[0] + totalDebtMoneys[0] + totalFundMoneys[1] + totalStockMoneys[1]
     }
 
-    _mapToList(productMap, filter=false) {
+    _mapToList(productMap, filter = false) {
         let arr = []
         for (let productId of Object.keys(productMap)) {
             let detail = productMap[productId]
-            if(filter && MoneyUtil.noValue(detail.currentPrice?.money) && MoneyUtil.noValue(detail.profits?.filterTotalMoney) && 
+            if (filter && MoneyUtil.noValue(detail.currentPrice?.money) && MoneyUtil.noValue(detail.profits?.filterTotalMoney) &&
                 MoneyUtil.noValue(detail.buySells?.filterMoney) && MoneyUtil.noValue(detail.buySells?.totalMoney)) {
                 //四个值全没有，不展示
             } else {
@@ -1023,15 +1159,15 @@ class MonthPage extends React.Component {
     }
 
     _getProductsProfitEntitys(products) {
-        if(DataUtil.isEmpty(products)) {
+        if (DataUtil.isEmpty(products)) {
             return []
         }
         let profitEntitys = []
         Object.keys(products).map(productId => {
             let product = products[productId]
             let filterDatas = product.profits?.filterDatas
-            if(!DataUtil.isNull(filterDatas)) {
-                for(let data of filterDatas) {
+            if (!DataUtil.isNull(filterDatas)) {
+                for (let data of filterDatas) {
                     profitEntitys.push(this.newEntity(data.happenTime, data.productName, data.money, null))
                 }
             }
@@ -1045,10 +1181,10 @@ class MonthPage extends React.Component {
         let stockData = yearInvestData['stock']
         let details = []
         details.push(...this._getProductsProfitEntitys(assetData['products']),
-                 ...this._getProductsProfitEntitys(fundData['products']),
-                 ...this._getProductsProfitEntitys(stockData['products']))
+            ...this._getProductsProfitEntitys(fundData['products']),
+            ...this._getProductsProfitEntitys(stockData['products']))
         return {
-            'total': assetData['totalProfitMoneys'][1] + fundData['totalProfitMoneys'][1] 
+            'total': assetData['totalProfitMoneys'][1] + fundData['totalProfitMoneys'][1]
                 + stockData['totalProfitMoneys'][1],
             'details': details
         }
@@ -1061,6 +1197,63 @@ class MonthPage extends React.Component {
         return {
             'total': debtData['totalProfitMoneys'][1],
             'details': details
+        }
+    }
+
+    calculateChartData(expendDetails) {
+        if (!expendDetails || !Array.isArray(expendDetails)) {
+            return []
+        }
+        let categoryMap = {}
+        expendDetails.forEach(detail => {
+            if (!detail.type) return
+            let type = IncomeExpenditureService.getIncomeExpendTypeByCode(detail.type.code)
+            let group = IncomeExpenditureService.getIncomeExpendGroupByCode(detail.type.code)
+            if (group) {
+                if (!categoryMap[group.code]) {
+                    categoryMap[group.code] = { name: group.name, total: 0, subs: {} }
+                }
+                categoryMap[group.code].total += Math.abs(detail.money || 0)
+                if (!categoryMap[group.code].subs[detail.type.code]) {
+                    categoryMap[group.code].subs[detail.type.code] = { name: detail.type.name, total: 0, details: [] }
+                }
+                categoryMap[group.code].subs[detail.type.code].total += Math.abs(detail.money || 0)
+                categoryMap[group.code].subs[detail.type.code].details.push({
+                    money: detail.money,
+                    desc: detail.desc,
+                    happenTime: detail.happenTime
+                })
+            }
+        })
+        const cats = Object.values(categoryMap)
+        const total = cats.reduce((sum, cat) => sum + cat.total, 0)
+        return cats.map(cat => ({
+            type: cat.name,
+            value: cat.total,
+            percent: total > 0 ? (cat.total / total) : 0,
+            subs: cat.subs
+        }))
+    }
+
+    handleChartClick = (event) => {
+        const data = event.data.data || event.data
+        if (data && data.subs && Object.keys(data.subs).length > 0) {
+            const subs = Object.values(data.subs).map(sub => ({
+                name: sub.name,
+                total: sub.total,
+                details: sub.details
+            }))
+            const total = subs.reduce((sum, sub) => sum + sub.total, 0)
+            const subData = subs.map(sub => ({
+                type: sub.name,
+                value: sub.total,
+                percent: total > 0 ? (sub.total / total) : 0,
+                details: sub.details
+            }))
+            console.log("subData=", subData)
+            this.setState({ selectedCategory: data.type, subChartData: subData })
+        } else {
+            this.setState({ selectedCategory: null, subChartData: [] })
         }
     }
 }

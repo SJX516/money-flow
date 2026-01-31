@@ -7,6 +7,13 @@ module.exports = {
                     test: /\.wasm$/,
                     type: 'javascript/auto',
                 }]
+            },
+            resolve: {
+                fallback: {
+                    fs: false,
+                    path: false,
+                    crypto: false,
+                }
             }
         }
     }

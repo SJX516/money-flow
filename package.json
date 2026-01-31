@@ -7,11 +7,11 @@
     "@ant-design/charts": "^1.4.2",
     "antd": "^4.20.4",
     "gh-pages": "^4.0.0",
-    "react": "^17.0.2",
+    "react": "^18.3.1",
     "react-app-rewired": "^2.2.1",
-    "react-dom": "^17.0.2",
+    "react-dom": "^18.3.1",
     "react-error-overlay": "6.0.9",
-    "react-scripts": "4.0.3",
+    "react-scripts": "^5.0.1",
     "sql.js": "^1.6.2"
   },
   "devDependencies": {
@@ -23,9 +23,9 @@
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
     "start_newer": "export NODE_OPTIONS=--openssl-legacy-provider && craco start",
-    "start": "craco start",
+    "start": "export NODE_OPTIONS=--openssl-legacy-provider && craco start",
     "build_newer": "export NODE_OPTIONS=--openssl-legacy-provider && craco build",
-    "build": "craco build",
+    "build": "export NODE_OPTIONS=--openssl-legacy-provider && craco build",
     "test": "jest",
     "eject": "craco eject"
   },

@@ -317,23 +317,36 @@ class YearPage extends React.Component {
     getAggregateGroupDataArr(details) {
         let dataMap = {}
         let total = 0
-        for(let detail of details) {
+        for (let detail of details) {
             let type = IncomeExpenditureType.getByCode(detail.type.code)
-            type = type.getGroup()
-            if(!(type.code in dataMap)) {
-                dataMap[type.code] = {
-                    "name": type.name,
-                    "code": type.code,
-                    "value": 0
+            let groupType = type.getGroup()
+            if (!(groupType.code in dataMap)) {
+                dataMap[groupType.code] = {
+                    "name": groupType.name,
+                    "code": groupType.code,
+                    "value": 0,
+                    "details": {}
                 }
             }
-            let money = Math.abs(detail.money/100)
-            dataMap[type.code]['value'] += money
+            let money = Math.abs(detail.money / 100)
+            dataMap[groupType.code]['value'] += money
             total += money
+            // 添加二级类别到 details
+            if (!(type.code in dataMap[groupType.code]['details'])) {
+                dataMap[groupType.code]['details'][type.code] = {
+                    "name": type.name,
+                    "code": type.code,
+                    "value": 0,
+                }
+            }
+            dataMap[groupType.code]['details'][type.code]['value'] += money
         }
-        let dataArr = Object.keys(dataMap).map(code => {
-            dataMap[code]['valuePercent'] = dataMap[code]['value']/total
-            return dataMap[code]
+        let dataArr = Object.keys(dataMap).map(groupCode => {
+            dataMap[groupCode]['valuePercent'] = dataMap[groupCode]['value'] / total
+            dataMap[groupCode]['details'] = Object.keys(dataMap[groupCode]['details']).map(code => {
+                return dataMap[groupCode]['details'][code]
+            })
+            return dataMap[groupCode]
         }).sort((a, b) => DataUtil.compare(a.code, b.code))
         return dataArr
     }
@@ -341,12 +354,12 @@ class YearPage extends React.Component {
     getAggregateTimeDataArr(details, groupCode) {
         let dataMap = {}
         let total = 0
-        for(let detail of details) {
+        for (let detail of details) {
             let type = IncomeExpenditureType.getByCode(detail.type.code)
             let groupType = type.getGroup()
-            if(groupCode === groupType.code) {
+            if (groupCode === groupType.code) {
                 let key = TimeUtil.monthStr(detail.happenTime) + "_" + type.code
-                if(!(key in dataMap)) {
+                if (!(key in dataMap)) {
                     dataMap[key] = {
                         "name": type.name,
                         "code": type.code,
@@ -356,16 +369,16 @@ class YearPage extends React.Component {
                         "value": 0
                     }
                 }
-                let money = Math.abs(detail.money/100)
+                let money = Math.abs(detail.money / 100)
                 dataMap[key]['value'] += money
                 total += money
             }
         }
         let dataArr = Object.keys(dataMap).map(key => {
-            dataMap[key]['valuePercent'] = dataMap[key]['value']/total
+            dataMap[key]['valuePercent'] = dataMap[key]['value'] / total
             return dataMap[key]
         }).sort((a, b) => {
-            if(a.month == b.month) {
+            if (a.month == b.month) {
                 return DataUtil.compare(a.code, b.code)
             } else {
                 return a.month > b.month ? 1 : -1
@@ -479,11 +492,11 @@ class YearPage extends React.Component {
 
         let incomeGroupDataArr = this.getAggregateGroupDataArr(yearData.income.details)
         let expendGroupDataArr = this.getAggregateGroupDataArr(yearData.expend.details)
-        
+
         let barData = []
-        if(!DataUtil.isNull(this.state.selectedGroupCode)) {
+        if (!DataUtil.isNull(this.state.selectedGroupCode)) {
             let groupType = IncomeExpenditureType.getByCode(this.state.selectedGroupCode)
-            if(groupType.isIncome()) {
+            if (groupType.isIncome()) {
                 barData = this.getAggregateTimeDataArr(yearData.income.details, groupType.code)
             } else {
                 barData = this.getAggregateTimeDataArr(yearData.expend.details, groupType.code)
@@ -504,9 +517,9 @@ class YearPage extends React.Component {
                     <Pie {...this._getPieConfig(expendGroupDataArr)} />
                 </Col>
             </Row>
-            <Row style={{ padding: '10px'}}>
+            <Row style={{ padding: '10px' }}>
                 <Col span={24}>
-                    {barData.length > 0 ? <Column {...this._getBarConfig(barData)} /> : <div/>}
+                    {barData.length > 0 ? <Column {...this._getBarConfig(barData)} /> : <div />}
                 </Col>
             </Row>
             <Divider orientation="center">指标</Divider>
@@ -579,17 +592,17 @@ class YearPage extends React.Component {
             label: {
                 position: 'middle',
                 style: {
-                  fill: 'black',
-                  textAlign: 'center',
+                    fill: 'black',
+                    textAlign: 'center',
                 },
                 formatter: (item) => {
-                  return item.name + ": " + MoneyUtil.getPercentStr(item.valuePercent)
+                    return item.name + ": " + MoneyUtil.getPercentStr(item.valuePercent)
                 },
             },
             tooltip: {
                 formatter: (datum) => ({
-                  name: `${datum.name}`,
-                  value: `${MoneyUtil.getStr(datum.value, true)}`,
+                    name: `${datum.name}`,
+                    value: `${MoneyUtil.getStr(datum.value, true)}`,
                 }),
             },
         };
@@ -602,12 +615,12 @@ class YearPage extends React.Component {
             const R = containerWidth / 2; // r^2 = (w / 2)^2 + (h - offsetY)^2
             let scale = 1;
             if (containerWidth < textWidth) {
-              scale = Math.min(Math.sqrt(Math.abs(Math.pow(R, 2) / (Math.pow(textWidth / 2, 2) + Math.pow(textHeight, 2)))), 1);
+                scale = Math.min(Math.sqrt(Math.abs(Math.pow(R, 2) / (Math.pow(textWidth / 2, 2) + Math.pow(textHeight, 2)))), 1);
             }
             const textStyleStr = `width:${containerWidth}px;`;
             return `<div style="${textStyleStr};font-size:${scale}em;line-height:${scale < 1 ? 1 : 'inherit'};">${text}</div>`;
         }
-    
+
         const config = {
             appendPadding: 10,
             data: dataArr,
@@ -616,50 +629,80 @@ class YearPage extends React.Component {
             radius: 1,
             innerRadius: 0.618,
             label: {
-              type: 'inner',
-              offset: '-50%',
-              style: {
-                fill: 'black',
-                textAlign: 'center',
-              },
-              formatter: (item) => {
-                return item.name + ": " + MoneyUtil.getPercentStr(item.valuePercent)
-              },
-              autoRotate: false,
+                type: 'inner',
+                offset: '-50%',
+                style: {
+                    fill: 'black',
+                    textAlign: 'center',
+                },
+                formatter: (item) => {
+                    return item.name + ": " + MoneyUtil.getPercentStr(item.valuePercent)
+                },
+                autoRotate: false,
             },
             statistic: {
-              title: {
-                offsetY: -4,
-                customHtml: (container, view, datum) => {
-                  const { width, height } = container.getBoundingClientRect();
-                  const d = Math.sqrt(Math.pow(width / 2, 2) + Math.pow(height / 2, 2));
-                  const text = datum ? datum.name : '总计';
-                  return renderStatistic(d, text, {
-                    fontSize: 28,
-                  });
+                title: {
+                    customHtml: (container, view, datum, data) => {
+                        const total = data.reduce((r, d) => r + d.value, 0);
+                        const title = datum ? datum.name : '总计';
+                        const money = datum ? MoneyUtil.getStr(datum.value, true) : MoneyUtil.getStr(total, true);
+                        return (
+                            <div>
+                                <div style={{ marginBottom: 10, fontWeight: 'bold' }}>{money}</div>
+                                <div style={{ fontWeight: 'bold' }}>{title}</div>
+                            </div>
+                        );
+                    },
                 },
-              },
-              content: {
-                offsetY: 4,
-                customHtml: (container, view, datum, data) => {
-                  const { width } = container.getBoundingClientRect();
-                  const text = datum ? `${MoneyUtil.getStr(datum.value, true)}` 
-                    : `${MoneyUtil.getStr(data.reduce((r, d) => r + d.value, 0), true)}`;
-                  return renderStatistic(width, text, {
-                    fontSize: 32,
-                  });
+                content: {
+                    customHtml: (container, view, datum, data) => {
+                        if (datum) {
+                            const details = datum.details || [];
+                            return (<div>
+                                {details.map((d, i) => (
+                                    <div key={i} style={{ marginTop: 6, fontSize: 14, fontWeight: 'normal' }}>
+                                        {d.name} {MoneyUtil.getStr(d.value, true)}
+                                    </div>
+                                ))}
+                            </div>)
+                        }
+                    },
                 },
-              },
+            },
+            statisticOld: {
+                title: {
+                    offsetY: -4,
+                    customHtml: (container, view, datum) => {
+                        const { width, height } = container.getBoundingClientRect();
+                        const d = Math.sqrt(Math.pow(width / 2, 2) + Math.pow(height / 2, 2));
+                        const text = datum ? datum.name : '总计';
+                        return renderStatistic(d, text, {
+                            fontSize: 28,
+                        });
+                    },
+                },
+                content: {
+                    offsetY: 4,
+                    customHtml: (container, view, datum, data) => {
+                        const { width } = container.getBoundingClientRect();
+                        const text = datum ? `${MoneyUtil.getStr(datum.value, true)}`
+                            : `${MoneyUtil.getStr(data.reduce((r, d) => r + d.value, 0), true)}`;
+                        return renderStatistic(width, text, {
+                            fontSize: 32,
+                        });
+                    },
+                },
+
             },
             // 添加 中心统计文本 交互
             interactions: [{
                 type: 'element-selected',
-              },{
+            }, {
                 type: 'element-active',
-              },{
+            }, {
                 type: 'pie-statistic-active',
-              },],
-            onReady:(plot) => {
+            },],
+            onReady: (plot) => {
                 plot.on('element:click', (event) => {
                     this.setState({
                         selectedGroupCode: event.data.data.code
