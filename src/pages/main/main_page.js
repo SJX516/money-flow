@@ -1,4 +1,4 @@
-import { Layout, Menu, message } from "antd";
+import { Layout, Menu } from "antd";
 import React from 'react';
 import { App, DB_INIT } from '../../app.js';
 import InitPage from '../detail/init_page';
@@ -7,6 +7,7 @@ import MonthPage from '../detail/month_page';
 import TodoPage from '../detail/todo_page';
 import UserPage from '../detail/user_page';
 import YearPage from '../detail/year_page';
+import FinancePage from '../detail/finance_page';
 import TestPage from './test_page';
 
 const { Header } = Layout;
@@ -20,6 +21,7 @@ class MainPage extends React.Component {
             'by_month': "按月展示",
             'by_year': "按年展示",
             'invest_detail': "投资详情",
+            'finance': "理财页面",
             'user_config': "用户配置",
         }
         if(!App.isProduction()) {
@@ -59,6 +61,8 @@ class MainPage extends React.Component {
                 subPage = <YearPage />
             } else if (navKey === 'invest_detail') {
                 subPage = <InvestPage />
+            } else if (navKey === 'finance') {
+                subPage = <FinancePage />
             } else if (navKey === 'user_config') {
                 subPage = <UserPage />
             } else {

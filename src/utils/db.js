@@ -144,8 +144,7 @@ class DBHelper {
 
     export() {
         const data = this.db.export();
-        const buffer = Buffer.from(data);
-        var blob = new Blob([buffer]);
+        var blob = new Blob([data]);
         var url = window.URL.createObjectURL(blob);
         this.downloadFile(url)
     }
