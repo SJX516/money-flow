@@ -1,24 +1,14 @@
 {
   "files": {
-    "main.css": "/money-flow/static/css/main.e3d14d12.chunk.css",
-    "main.js": "/money-flow/static/js/main.6740c311.chunk.js",
-    "main.js.map": "/money-flow/static/js/main.6740c311.chunk.js.map",
-    "runtime-main.js": "/money-flow/static/js/runtime-main.1aa1a4f8.js",
-    "runtime-main.js.map": "/money-flow/static/js/runtime-main.1aa1a4f8.js.map",
-    "static/css/2.149e6c5c.chunk.css": "/money-flow/static/css/2.149e6c5c.chunk.css",
-    "static/js/2.598a6338.chunk.js": "/money-flow/static/js/2.598a6338.chunk.js",
-    "static/js/2.598a6338.chunk.js.map": "/money-flow/static/js/2.598a6338.chunk.js.map",
+    "main.css": "/money-flow/static/css/main.f3134910.css",
+    "main.js": "/money-flow/static/js/main.f313231e.js",
+    "sql-wasm.wasm": "/money-flow/sql-wasm-7f26ab750fcdafabbe18c6525a66a0bd.wasm",
     "index.html": "/money-flow/index.html",
-    "sql-wasm.wasm": "/money-flow/sql-wasm-2b277767061e6a2529fe1f2e6fe80b4a.wasm",
-    "static/css/2.149e6c5c.chunk.css.map": "/money-flow/static/css/2.149e6c5c.chunk.css.map",
-    "static/css/main.e3d14d12.chunk.css.map": "/money-flow/static/css/main.e3d14d12.chunk.css.map",
-    "static/js/2.598a6338.chunk.js.LICENSE.txt": "/money-flow/static/js/2.598a6338.chunk.js.LICENSE.txt"
+    "main.f3134910.css.map": "/money-flow/static/css/main.f3134910.css.map",
+    "main.f313231e.js.map": "/money-flow/static/js/main.f313231e.js.map"
   },
   "entrypoints": [
-    "static/js/runtime-main.1aa1a4f8.js",
-    "static/css/2.149e6c5c.chunk.css",
-    "static/js/2.598a6338.chunk.js",
-    "static/css/main.e3d14d12.chunk.css",
-    "static/js/main.6740c311.chunk.js"
+    "static/css/main.f3134910.css",
+    "static/js/main.f313231e.js"
   ]
 }
