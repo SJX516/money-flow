@@ -49,7 +49,7 @@ class MainPage extends React.Component {
         let subPage = null
         if (navKey === 'init') {
             subPage = <InitPage onDbReady={() => {
-                let newKey = App.isProduction() ? "by_month" : "user_config"
+                let newKey = App.isProduction() ? "by_month" : "finance"
                 this.setState({ navKey: newKey })
             }} />
         } else {
