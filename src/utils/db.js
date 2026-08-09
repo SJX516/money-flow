@@ -55,7 +55,16 @@ class DBHelper {
         })
         const Uints = new Uint8Array(fileResult);
         this.db = new SQL.Database(Uints);
+        this.validatePersonalSchema();
         this.applyUpdate();
+    }
+
+    validatePersonalSchema() {
+        const required = ["data_summary", "income_expenditure_detail", "investment_detail", "investment_product"];
+        const result = this.db.exec("SELECT name FROM sqlite_master WHERE type='table'");
+        const names = new Set(result.length ? result[0].values.map(row => row[0]) : []);
+        const missing = required.filter(name => !names.has(name));
+        if (missing.length) throw new Error("不是有效的个人数据库，缺少表：" + missing.join("、"));
     }
 
     async createDb() {

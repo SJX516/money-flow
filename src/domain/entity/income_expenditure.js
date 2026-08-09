@@ -26,6 +26,10 @@ class IncomeExpenditureDetail extends BaseEntity {
         return this.repo.select(startTime, endTime)
     }
 
+    static queryAll() {
+        return this.repo.selectAll()
+    }
+
     static delete(id) {
         IncomeExpenditureDetail.repo.delete(id)
     }

@@ -8,7 +8,7 @@ import TodoPage from '../detail/todo_page';
 import UserPage from '../detail/user_page';
 import YearPage from '../detail/year_page';
 import FinancePage from '../detail/finance_page';
-import TestPage from './test_page';
+import SingleItemPage from '../detail/single_item_page';
 
 const { Header } = Layout;
 
@@ -16,20 +16,16 @@ class MainPage extends React.Component {
 
     constructor(props) {
         super(props)
-        let items = {
-            'init': "数据初始化",
-            'by_month': "按月展示",
-            'by_year': "按年展示",
-            'invest_detail': "投资详情",
-            'finance': "理财页面",
-            'user_config': "用户配置",
-        }
-        if(!App.isProduction()) {
-            items['test'] = '测试页面'
-        }
-        this.navItems = Object.keys(items).map((key) => {
-            return { key, label: items[key] }
-        });
+        const items = [
+            { key: "by_month", label: "🗓️ 按月展示" },
+            { key: "by_year", label: "📆 按年展示" },
+            { key: "single_item", label: "🔎 单项展示" },
+            { key: "invest_detail", label: "💼 投资详情" },
+            { key: "finance", label: "📈 理财页面" },
+            { key: "init", label: "🗄️ 数据初始化", style: { marginLeft: "auto" } },
+            { key: "user_config", label: "⚙️ 用户配置" }
+        ]
+        this.navItems = items;
         this.state = {
             navKey: "init",
         }
@@ -43,7 +39,8 @@ class MainPage extends React.Component {
 
     render() {
         let navKey = this.state.navKey
-        if (DB_INIT !== true) {
+        // 理财页面使用独立行情 DB，无需先初始化个人财务 DB。
+        if (DB_INIT !== true && navKey !== 'finance') {
             navKey = 'init'
         }
         let subPage = null
@@ -53,12 +50,12 @@ class MainPage extends React.Component {
                 this.setState({ navKey: newKey })
             }} />
         } else {
-            if (navKey === 'test') {
-                subPage = <TestPage />
-            } else if (navKey === 'by_month') {
+            if (navKey === 'by_month') {
                 subPage = <MonthPage />
             } else if (navKey === 'by_year') {
                 subPage = <YearPage />
+            } else if (navKey === 'single_item') {
+                subPage = <SingleItemPage />
             } else if (navKey === 'invest_detail') {
                 subPage = <InvestPage />
             } else if (navKey === 'finance') {
@@ -72,7 +69,7 @@ class MainPage extends React.Component {
         return (
             <Layout>
                 <Header className="header">
-                    <Menu theme="dark" mode="horizontal" items={this.navItems} selectedKeys={[navKey]}
+                    <Menu theme="dark" mode="horizontal" style={{ display: "flex", width: "100%" }} items={this.navItems} selectedKeys={[navKey]}
                         onSelect={(item) => {
                             this.setState({ navKey: item.key })
                         }} />

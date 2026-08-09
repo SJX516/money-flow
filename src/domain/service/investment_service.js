@@ -155,6 +155,20 @@ class InvestmentService {
         return InvestmentDetail.queryTimeBetwen(productId, InvestmentRecordType.BuySell, null, endTime)
     }
 
+    static getProductTradesWithProceedsBefore(productId, endTime) {
+        const details = InvestmentDetail.queryTimeBetwen(productId, null, null, endTime)
+        const profits = {}
+        details.filter(detail => detail.recordType === InvestmentRecordType.Profit && detail.buySellId != null)
+            .forEach(detail => { profits[detail.buySellId] = (profits[detail.buySellId] || 0) + Number(detail.money || 0) })
+        return details.filter(detail => detail.recordType === InvestmentRecordType.BuySell).map(detail => {
+            const count = Number(detail.count)
+            const sell = Number(detail.money) < 0 || (Number.isFinite(count) && count < 0)
+            const amount = sell ? Math.abs(Number(detail.money) || 0) + (profits[detail.id] || 0)
+                : Math.abs(Number(detail.money) || 0)
+            return { detail, amount: Math.abs(amount) }
+        })
+    }
+
     static addAssetDebtProfit(productId, productName, productTypeCode, money, currentPrice, happenTime) {
         if (!DataUtil.notNumber(money) && money != 0) {
             this._upsertInvest(productId, productName, productTypeCode, money, happenTime,

@@ -143,6 +143,10 @@ class IncomeExpenditureService {
         return IncomeExpenditureDetail.queryTimeBetwen(startDate, endDate)
     }
 
+    static queryAll() {
+        return IncomeExpenditureDetail.queryAll()
+    }
+
     static delete(id) {
         IncomeExpenditureDetail.delete(id)
     }

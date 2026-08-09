@@ -16,6 +16,11 @@ class SummaryService {
             return TimeUtil.monthStr(d.time)
         })
     }
+
+    static latestMonth() {
+        const months = this.queryMonths().filter(Boolean).sort()
+        return months.length ? months[months.length - 1] : null
+    }
 }
 
 export { SummaryService }
