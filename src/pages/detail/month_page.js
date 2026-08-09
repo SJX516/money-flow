@@ -5,6 +5,7 @@ import { IncomeExpenditureType } from '../../domain/entity/income_expenditure';
 import { UserConfigType } from '../../domain/entity/user_entity';
 import { IncomeExpenditureService } from '../../domain/service/income_expenditure_service';
 import InvestmentService from '../../domain/service/investment_service';
+import { ReportCalculationService } from '../../domain/service/report_calculation_service';
 import { SummaryService } from '../../domain/service/summary_service';
 import { IncomeExpenditureVMService, InvestmentVMService } from '../../domain/service/view_model_service';
 import { DataUtil, MoneyUtil, TimeUtil } from '../../utils/utils';
@@ -232,23 +233,25 @@ class MonthPage extends React.Component {
             key: 'qoqPaperProfit',
             dataIndex: 'entity',
             render: (entity) => {
-                return <Text>{MoneyUtil.getStr(this.getQoqPaperProfit(entity))}</Text>
+                return <Text>{MoneyUtil.getStr(ReportCalculationService.getPeriodProfit(entity, this.lastMonthAllInvestData))}</Text>
             },
             sorter: (a, b) => {
-                return MoneyUtil.compare(this.getQoqPaperProfit(a.entity), this.getQoqPaperProfit(b.entity))
+                return MoneyUtil.compare(
+                    ReportCalculationService.getPeriodProfit(a.entity, this.lastMonthAllInvestData),
+                    ReportCalculationService.getPeriodProfit(b.entity, this.lastMonthAllInvestData))
             }
         }, {
             title: '当期账面利润率',
             key: 'qoqPaperProfitPercent',
             dataIndex: 'entity',
             render: (entity) => {
-                let paperProfitPercent = this.getQoqPaperProfitPercent(entity)
+                let paperProfitPercent = ReportCalculationService.getPeriodProfitPercent(entity, this.lastMonthAllInvestData)
                 return <Text type={MoneyUtil.getPercentColorType(paperProfitPercent)}>
                     {MoneyUtil.getPercentStr(paperProfitPercent)}</Text>
             },
             sorter: (a, b) => {
-                let apaperProfitPercent = this.getQoqPaperProfitPercent(a.entity)
-                let bpaperProfitPercent = this.getQoqPaperProfitPercent(b.entity)
+                let apaperProfitPercent = ReportCalculationService.getPeriodProfitPercent(a.entity, this.lastMonthAllInvestData)
+                let bpaperProfitPercent = ReportCalculationService.getPeriodProfitPercent(b.entity, this.lastMonthAllInvestData)
                 return DataUtil.compare(apaperProfitPercent, bpaperProfitPercent)
             }
         }, {
@@ -369,30 +372,6 @@ class MonthPage extends React.Component {
                 </Space>
             ),
         },]
-    }
-
-    getQoqPaperProfit(entity) {
-        let lastMonthPaperProfit = InvestmentVMService.getPaperProfit(this._getLastMonthProductDetail(entity.info.productId))
-        // 当期账面利润
-        let paperProfit = InvestmentVMService.getPaperProfit(entity)
-        // 当期卖出所得利润
-        let sellProfit = DataUtil.safeGetNumber(entity.profits?.filterTotalMoney)
-        return sellProfit + paperProfit - lastMonthPaperProfit
-    }
-
-    //用这个月新增的账面利润 / 总投资额 得到这个月的收益率
-    getQoqPaperProfitPercent(entity) {
-        return MoneyUtil.safeDivision(this.getQoqPaperProfit(entity), entity?.buySells?.totalMoney)
-    }
-
-    _getLastMonthProductDetail(productId) {
-        for (let item of [this.lastMonthAllInvestData['fund'], this.lastMonthAllInvestData['stock'],
-        this.lastMonthAllInvestData['asset'], this.lastMonthAllInvestData['debt']]) {
-            if (productId in item['products']) {
-                return item['products'][productId]
-            }
-        }
-        return null
     }
 
     insertData(inputValues) {
@@ -576,48 +555,51 @@ class MonthPage extends React.Component {
         let totalIncome = monthData['income']['total'], totalExpend = monthData['expend']['total']
 
         // 计算支出图表数据
-        let chartData = this.calculateChartData(monthData['expend']['details'])
+        let chartData = ReportCalculationService.getExpenseChartData(
+            monthData['expend']['details'],
+            code => IncomeExpenditureService.getIncomeExpendTypeByCode(code),
+            code => IncomeExpenditureService.getIncomeExpendGroupByCode(code))
 
         //处理资产、负债、投资的一些总数据
         let allInvestData = InvestmentVMService.queryMonthData(currentMonthDate)
-        let passiveIncomeSummary = this._getPassiveIncomeSummary(allInvestData)
-        let passiveExpendSummary = this._getPassiveExpendSummary(allInvestData)
+        let passiveIncomeSummary = ReportCalculationService.getPassiveSummary(allInvestData, ['asset', 'fund', 'stock'])
+        let passiveExpendSummary = ReportCalculationService.getPassiveSummary(allInvestData, ['debt'])
 
         console.log("===== monthData     =====", monthData)
         console.log("===== allInvestData =====", allInvestData)
 
         this.lastMonthAllInvestData = InvestmentVMService.queryMonthData(TimeUtil.lastMonthEnd(currentMonthDate))
 
-        let currentMonthTotalMoney = this._getTotalMoney(allInvestData)
-        let lastMonthTotalMoney = this._getTotalMoney(this.lastMonthAllInvestData)
+        let currentMonthTotalMoney = ReportCalculationService.getTotalMoney(allInvestData)
+        let lastMonthTotalMoney = ReportCalculationService.getTotalMoney(this.lastMonthAllInvestData)
         let currentMonthAddMoney = totalIncome + totalExpend + passiveIncomeSummary['total'] + passiveExpendSummary['total']
 
-        incomeExpendData.push({ key: "主动收入", entity: this.newEntity(null, "主动收入", totalIncome, null, monthData['income']['details']) })
+        incomeExpendData.push({ key: "主动收入", entity: ReportCalculationService.newEntity(null, "主动收入", totalIncome, null, monthData['income']['details']) })
         incomeExpendData.push({
-            key: "被动收入", entity: this.newEntity(null, "被动收入", passiveIncomeSummary['total'],
+            key: "被动收入", entity: ReportCalculationService.newEntity(null, "被动收入", passiveIncomeSummary['total'],
                 null, passiveIncomeSummary['details'])
         })
-        incomeExpendData.push({ key: "主动支出", entity: this.newEntity(null, "主动支出", totalExpend, null, monthData['expend']['details']) })
+        incomeExpendData.push({ key: "主动支出", entity: ReportCalculationService.newEntity(null, "主动支出", totalExpend, null, monthData['expend']['details']) })
         incomeExpendData.push({
-            key: "被动支出", entity: this.newEntity(null, "被动支出", passiveExpendSummary['total'],
+            key: "被动支出", entity: ReportCalculationService.newEntity(null, "被动支出", passiveExpendSummary['total'],
                 null, passiveExpendSummary['details'])
         })
         incomeExpendData.push({
-            key: "新增现金", entity: this.newEntity(null, "新增现金", currentMonthAddMoney,
+            key: "新增现金", entity: ReportCalculationService.newEntity(null, "新增现金", currentMonthAddMoney,
                 null)
         })
         incomeExpendData.push({
-            key: "上期总资产", entity: this.newEntity(null, "上期总资产", lastMonthTotalMoney,
+            key: "上期总资产", entity: ReportCalculationService.newEntity(null, "上期总资产", lastMonthTotalMoney,
                 null)
         })
 
         let totalMoneyEntitys = []
-        totalMoneyEntitys.push(this.newEntity(null, "资产总额", allInvestData['asset']['totalMoneys'][0], null))
-        totalMoneyEntitys.push(this.newEntity(null, "负债总额", allInvestData['debt']['totalMoneys'][0], null))
-        totalMoneyEntitys.push(this.newEntity(null, "投资总额", allInvestData['fund']['totalMoneys'][1], `账面价值：${MoneyUtil.getStr(allInvestData['fund']['totalMoneys'][0])}`))
-        totalMoneyEntitys.push(this.newEntity(null, "股票总额", allInvestData['stock']['totalMoneys'][1], `账面价值：${MoneyUtil.getStr(allInvestData['stock']['totalMoneys'][0])}`))
+        totalMoneyEntitys.push(ReportCalculationService.newEntity(null, "资产总额", allInvestData['asset']['totalMoneys'][0], null))
+        totalMoneyEntitys.push(ReportCalculationService.newEntity(null, "负债总额", allInvestData['debt']['totalMoneys'][0], null))
+        totalMoneyEntitys.push(ReportCalculationService.newEntity(null, "投资总额", allInvestData['fund']['totalMoneys'][1], `账面价值：${MoneyUtil.getStr(allInvestData['fund']['totalMoneys'][0])}`))
+        totalMoneyEntitys.push(ReportCalculationService.newEntity(null, "股票总额", allInvestData['stock']['totalMoneys'][1], `账面价值：${MoneyUtil.getStr(allInvestData['stock']['totalMoneys'][0])}`))
         incomeExpendData.push({
-            key: "当前总资产", entity: this.newEntity(null, "当前总资产", currentMonthTotalMoney,
+            key: "当前总资产", entity: ReportCalculationService.newEntity(null, "当前总资产", currentMonthTotalMoney,
                 null, totalMoneyEntitys)
         })
 
@@ -637,11 +619,11 @@ class MonthPage extends React.Component {
         }
 
         //处理资产、负债、投资的表格数据
-        let fundData = this._mapToList(allInvestData['fund']['products'], true)
-        let stockData = this._mapToList(allInvestData['stock']['products'], true)
+        let fundData = ReportCalculationService.productsToRows(allInvestData['fund']['products'], true)
+        let stockData = ReportCalculationService.productsToRows(allInvestData['stock']['products'], true)
         let assetDebtDatas = []
-        assetDebtDatas.push(...this._mapToList(allInvestData['asset']['products']),
-            ...this._mapToList(allInvestData['debt']['products']))
+        assetDebtDatas.push(...ReportCalculationService.productsToRows(allInvestData['asset']['products']),
+            ...ReportCalculationService.productsToRows(allInvestData['debt']['products']))
 
         let subInvestRowRender = (record, index) => {
             const data = [];
@@ -1126,131 +1108,10 @@ class MonthPage extends React.Component {
         return UIUtils.createShowTextRow(title, MoneyUtil.getStr(money), "")
     }
 
-    newEntity(happenTime, title, money, desc, child = []) {
-        return {
-            happenTime: happenTime,
-            title: title,
-            money: money,
-            desc: desc,
-            child: child
-        }
-    }
-
-    _getTotalMoney(allInvestData) {
-        let totalAssetMoneys = allInvestData['asset']['totalMoneys']
-        let totalFundMoneys = allInvestData['fund']['totalMoneys']
-        let totalStockMoneys = allInvestData['stock']['totalMoneys']
-        let totalDebtMoneys = allInvestData['debt']['totalMoneys']
-        return totalAssetMoneys[0] + totalDebtMoneys[0] + totalFundMoneys[1] + totalStockMoneys[1]
-    }
-
-    _mapToList(productMap, filter = false) {
-        let arr = []
-        for (let productId of Object.keys(productMap)) {
-            let detail = productMap[productId]
-            if (filter && MoneyUtil.noValue(detail.currentPrice?.money) && MoneyUtil.noValue(detail.profits?.filterTotalMoney) &&
-                MoneyUtil.noValue(detail.buySells?.filterMoney) && MoneyUtil.noValue(detail.buySells?.totalMoney)) {
-                //四个值全没有，不展示
-            } else {
-                arr.push({ key: productId, entity: detail })
-            }
-        }
-        return arr
-    }
-
-    _getProductsProfitEntitys(products) {
-        if (DataUtil.isEmpty(products)) {
-            return []
-        }
-        let profitEntitys = []
-        Object.keys(products).map(productId => {
-            let product = products[productId]
-            let filterDatas = product.profits?.filterDatas
-            if (!DataUtil.isNull(filterDatas)) {
-                for (let data of filterDatas) {
-                    profitEntitys.push(this.newEntity(data.happenTime, data.productName, data.money, null))
-                }
-            }
-        })
-        return profitEntitys
-    }
-
-    _getPassiveIncomeSummary(yearInvestData) {
-        let assetData = yearInvestData['asset']
-        let fundData = yearInvestData['fund']
-        let stockData = yearInvestData['stock']
-        let details = []
-        details.push(...this._getProductsProfitEntitys(assetData['products']),
-            ...this._getProductsProfitEntitys(fundData['products']),
-            ...this._getProductsProfitEntitys(stockData['products']))
-        return {
-            'total': assetData['totalProfitMoneys'][1] + fundData['totalProfitMoneys'][1]
-                + stockData['totalProfitMoneys'][1],
-            'details': details
-        }
-    }
-
-    _getPassiveExpendSummary(yearInvestData) {
-        let debtData = yearInvestData['debt']
-        let details = []
-        details.push(...this._getProductsProfitEntitys(debtData['products']))
-        return {
-            'total': debtData['totalProfitMoneys'][1],
-            'details': details
-        }
-    }
-
-    calculateChartData(expendDetails) {
-        if (!expendDetails || !Array.isArray(expendDetails)) {
-            return []
-        }
-        let categoryMap = {}
-        expendDetails.forEach(detail => {
-            if (!detail.type) return
-            let type = IncomeExpenditureService.getIncomeExpendTypeByCode(detail.type.code)
-            let group = IncomeExpenditureService.getIncomeExpendGroupByCode(detail.type.code)
-            if (group) {
-                if (!categoryMap[group.code]) {
-                    categoryMap[group.code] = { name: group.name, total: 0, subs: {} }
-                }
-                categoryMap[group.code].total += Math.abs(detail.money || 0)
-                if (!categoryMap[group.code].subs[detail.type.code]) {
-                    categoryMap[group.code].subs[detail.type.code] = { name: detail.type.name, total: 0, details: [] }
-                }
-                categoryMap[group.code].subs[detail.type.code].total += Math.abs(detail.money || 0)
-                categoryMap[group.code].subs[detail.type.code].details.push({
-                    money: detail.money,
-                    desc: detail.desc,
-                    happenTime: detail.happenTime
-                })
-            }
-        })
-        const cats = Object.values(categoryMap)
-        const total = cats.reduce((sum, cat) => sum + cat.total, 0)
-        return cats.map(cat => ({
-            type: cat.name,
-            value: cat.total,
-            percent: total > 0 ? (cat.total / total) : 0,
-            subs: cat.subs
-        }))
-    }
-
     handleChartClick = (event) => {
         const data = event.data.data || event.data
         if (data && data.subs && Object.keys(data.subs).length > 0) {
-            const subs = Object.values(data.subs).map(sub => ({
-                name: sub.name,
-                total: sub.total,
-                details: sub.details
-            }))
-            const total = subs.reduce((sum, sub) => sum + sub.total, 0)
-            const subData = subs.map(sub => ({
-                type: sub.name,
-                value: sub.total,
-                percent: total > 0 ? (sub.total / total) : 0,
-                details: sub.details
-            }))
-            console.log("subData=", subData)
+            const subData = ReportCalculationService.getSubChartData(data.subs)
             this.setState({ selectedCategory: data.type, subChartData: subData })
         } else {
             this.setState({ selectedCategory: null, subChartData: [] })

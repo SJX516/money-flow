@@ -3,6 +3,7 @@ import { Breadcrumb, Button, Col, Divider, Layout, Menu, Row, Table, Tag, Typogr
 import React from 'react';
 import { IncomeExpenditureType } from '../../domain/entity/income_expenditure';
 import { SummaryService } from '../../domain/service/summary_service';
+import { ReportCalculationService } from '../../domain/service/report_calculation_service';
 import { IncomeExpenditureVMService, InvestmentVMService } from '../../domain/service/view_model_service';
 import { DataUtil, MoneyUtil, TimeUtil } from '../../utils/utils';
 import { UIUtils } from '../ui_utils';
@@ -314,79 +315,6 @@ class YearPage extends React.Component {
         })
     }
 
-    getAggregateGroupDataArr(details) {
-        let dataMap = {}
-        let total = 0
-        for (let detail of details) {
-            let type = IncomeExpenditureType.getByCode(detail.type.code)
-            let groupType = type.getGroup()
-            if (!(groupType.code in dataMap)) {
-                dataMap[groupType.code] = {
-                    "name": groupType.name,
-                    "code": groupType.code,
-                    "value": 0,
-                    "details": {}
-                }
-            }
-            let money = Math.abs(detail.money / 100)
-            dataMap[groupType.code]['value'] += money
-            total += money
-            // 添加二级类别到 details
-            if (!(type.code in dataMap[groupType.code]['details'])) {
-                dataMap[groupType.code]['details'][type.code] = {
-                    "name": type.name,
-                    "code": type.code,
-                    "value": 0,
-                }
-            }
-            dataMap[groupType.code]['details'][type.code]['value'] += money
-        }
-        let dataArr = Object.keys(dataMap).map(groupCode => {
-            dataMap[groupCode]['valuePercent'] = dataMap[groupCode]['value'] / total
-            dataMap[groupCode]['details'] = Object.keys(dataMap[groupCode]['details']).map(code => {
-                return dataMap[groupCode]['details'][code]
-            })
-            return dataMap[groupCode]
-        }).sort((a, b) => DataUtil.compare(a.code, b.code))
-        return dataArr
-    }
-
-    getAggregateTimeDataArr(details, groupCode) {
-        let dataMap = {}
-        let total = 0
-        for (let detail of details) {
-            let type = IncomeExpenditureType.getByCode(detail.type.code)
-            let groupType = type.getGroup()
-            if (groupCode === groupType.code) {
-                let key = TimeUtil.monthStr(detail.happenTime) + "_" + type.code
-                if (!(key in dataMap)) {
-                    dataMap[key] = {
-                        "name": type.name,
-                        "code": type.code,
-                        "groupCode": groupType.code,
-                        "groupName": groupType.name,
-                        "month": TimeUtil.monthStr(detail.happenTime),
-                        "value": 0
-                    }
-                }
-                let money = Math.abs(detail.money / 100)
-                dataMap[key]['value'] += money
-                total += money
-            }
-        }
-        let dataArr = Object.keys(dataMap).map(key => {
-            dataMap[key]['valuePercent'] = dataMap[key]['value'] / total
-            return dataMap[key]
-        }).sort((a, b) => {
-            if (a.month == b.month) {
-                return DataUtil.compare(a.code, b.code)
-            } else {
-                return a.month > b.month ? 1 : -1
-            }
-        })
-        return dataArr
-    }
-
     render() {
         let sideDatas = this.getByYearSideDatas(this.state.startMonth)
         let siderItems = sideDatas.map((yearStartMonth, i) => {
@@ -405,32 +333,32 @@ class YearPage extends React.Component {
         console.log("===== yearData     =====", yearData)
         console.log("===== allInvestData =====", allInvestData)
 
-        let passiveIncomeSummary = this._getPassiveIncomeSummary(allInvestData)
-        let passiveExpendSummary = this._getPassiveExpendSummary(allInvestData)
+        let passiveIncomeSummary = ReportCalculationService.getYearPassiveIncomeSummary(allInvestData)
+        let passiveExpendSummary = ReportCalculationService.getYearPassiveExpendSummary(allInvestData)
 
         let incomeExpendData = []
         incomeExpendData.push({
-            key: "主动收入", entity: this.newEntity(null, "主动收入",
+            key: "主动收入", entity: ReportCalculationService.newEntity(null, "主动收入",
                 yearData['income']['total'], null, yearData['income']['sumByMonth'].map(it => {
-                    return this.newEntity(null, it['month'], it['total'], null)
+                    return ReportCalculationService.newEntity(null, it['month'], it['total'], null)
                 }))
         })
         incomeExpendData.push({
-            key: "被动收入", entity: this.newEntity(null, "被动收入",
+            key: "被动收入", entity: ReportCalculationService.newEntity(null, "被动收入",
                 passiveIncomeSummary['total'], null, passiveIncomeSummary['details'])
         })
         incomeExpendData.push({
-            key: "主动支出", entity: this.newEntity(null, "主动支出",
+            key: "主动支出", entity: ReportCalculationService.newEntity(null, "主动支出",
                 yearData['expend']['total'], null, yearData['expend']['sumByMonth'].map(it => {
-                    return this.newEntity(null, it['month'], it['total'], null)
+                    return ReportCalculationService.newEntity(null, it['month'], it['total'], null)
                 }))
         })
         incomeExpendData.push({
-            key: "被动支出", entity: this.newEntity(null, "被动支出",
+            key: "被动支出", entity: ReportCalculationService.newEntity(null, "被动支出",
                 passiveExpendSummary['total'], null, passiveExpendSummary['details'])
         })
         incomeExpendData.push({
-            key: "新增现金", entity: this.newEntity(null, "新增现金",
+            key: "新增现金", entity: ReportCalculationService.newEntity(null, "新增现金",
                 yearData['income']['total'] + passiveIncomeSummary['total'] +
                 yearData['expend']['total'] + passiveExpendSummary['total'], null)
         })
@@ -449,11 +377,11 @@ class YearPage extends React.Component {
             return !DataUtil.isNull(record.entity.child) &&
                 record.entity.child.length > 0
         }
-        let fundData = this._mapToList(allInvestData['fund']['products'], true)
-        let stockData = this._mapToList(allInvestData['stock']['products'], true)
+        let fundData = ReportCalculationService.productsToRows(allInvestData['fund']['products'], true)
+        let stockData = ReportCalculationService.productsToRows(allInvestData['stock']['products'], true)
         let assetDebtDatas = []
-        assetDebtDatas.push(...this._mapToList(allInvestData['asset']['products']),
-            ...this._mapToList(allInvestData['debt']['products']))
+        assetDebtDatas.push(...ReportCalculationService.productsToRows(allInvestData['asset']['products']),
+            ...ReportCalculationService.productsToRows(allInvestData['debt']['products']))
 
         let subInvestRowRender = (record, index) => {
             const data = [];
@@ -490,16 +418,16 @@ class YearPage extends React.Component {
                 record.entity.profits?.filterDatas.length > 0
         }
 
-        let incomeGroupDataArr = this.getAggregateGroupDataArr(yearData.income.details)
-        let expendGroupDataArr = this.getAggregateGroupDataArr(yearData.expend.details)
+        let incomeGroupDataArr = ReportCalculationService.aggregateByGroup(yearData.income.details)
+        let expendGroupDataArr = ReportCalculationService.aggregateByGroup(yearData.expend.details)
 
         let barData = []
         if (!DataUtil.isNull(this.state.selectedGroupCode)) {
             let groupType = IncomeExpenditureType.getByCode(this.state.selectedGroupCode)
             if (groupType.isIncome()) {
-                barData = this.getAggregateTimeDataArr(yearData.income.details, groupType.code)
+                barData = ReportCalculationService.aggregateByMonthAndType(yearData.income.details, groupType.code)
             } else {
-                barData = this.getAggregateTimeDataArr(yearData.expend.details, groupType.code)
+                barData = ReportCalculationService.aggregateByMonthAndType(yearData.expend.details, groupType.code)
             }
         }
 
@@ -713,54 +641,6 @@ class YearPage extends React.Component {
         return config
     }
 
-    newEntity(happenTime, title, money, desc, child = []) {
-        return {
-            happenTime: happenTime,
-            title: title,
-            money: money,
-            desc: desc,
-            child: child
-        }
-    }
-
-    _mapToList(productMap, filter = false) {
-        let arr = []
-        for (let productId of Object.keys(productMap)) {
-            let detail = productMap[productId]
-            if (filter && MoneyUtil.noValue(detail.currentPrice?.money) && MoneyUtil.noValue(detail.profits?.filterTotalMoney) &&
-                MoneyUtil.noValue(detail.buySells?.filterMoney) && MoneyUtil.noValue(detail.buySells?.totalMoney)) {
-                //四个值全没有，不展示
-            } else {
-                arr.push({ key: productId, entity: detail })
-            }
-        }
-        return arr
-    }
-
-    _getPassiveIncomeSummary(yearInvestData) {
-        let assetData = yearInvestData['asset']
-        let fundData = yearInvestData['fund']
-        let stockData = yearInvestData['stock']
-        return {
-            'total': assetData['totalProfitMoneys'][1] + fundData['totalProfitMoneys'][1]
-                + stockData['totalProfitMoneys'][1],
-            'details': [
-                this.newEntity(null, '资产收入', assetData['totalProfitMoneys'][1]),
-                this.newEntity(null, '投资收入', fundData['totalProfitMoneys'][1]),
-                this.newEntity(null, '股票收入', stockData['totalProfitMoneys'][1]),
-            ]
-        }
-    }
-
-    _getPassiveExpendSummary(yearInvestData) {
-        let debtData = yearInvestData['debt']
-        return {
-            'total': debtData['totalProfitMoneys'][1],
-            'details': [
-                this.newEntity(null, '负债支出', debtData['totalProfitMoneys'][1]),
-            ]
-        }
-    }
 }
 
 export default YearPage
