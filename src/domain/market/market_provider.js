@@ -1,4 +1,5 @@
 const JSONP_TIMEOUT = 30000;
+const INDEX_CODE_ALIASES = { "1A0001": "000001.SH" };
 
 function normalizeStockCode(input) {
     const raw = String(input || "").trim().toUpperCase();
@@ -15,6 +16,21 @@ function normalizeStockCode(input) {
         throw new Error("股票代码与市场后缀不匹配");
     }
     return digits + "." + market;
+}
+
+function normalizeSecurityCode(input) {
+    const raw = String(input || "").trim().toUpperCase();
+    if (/^\d{6}\.(SH|SZ|BJ)$/.test(raw)) return raw;
+    return normalizeStockCode(raw);
+}
+
+function normalizeIndexCode(input) {
+    const raw = String(input || "").trim().toUpperCase();
+    if (INDEX_CODE_ALIASES[raw]) return INDEX_CODE_ALIASES[raw];
+    const matched = raw.match(/^(\d{6})(?:\.(SH|SZ|BJ))?$/);
+    if (!matched) throw new Error("指数代码必须是 6 位字母或数字，例如 1A0001、000688");
+    const market = matched[2] || (matched[1].startsWith("399") ? "SZ" : matched[1].startsWith("899") ? "BJ" : "SH");
+    return matched[1] + "." + market;
 }
 
 function jsonp(url, callbackParam = "callback") {
@@ -50,6 +66,26 @@ function eastmoneyUrl(host, params) {
     return host + "?" + query.toString();
 }
 
+async function fetchStockInfo(code) {
+    const normalized = normalizeStockCode(code);
+    const now = new Date();
+    const endDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const start = new Date(endDate + "T00:00:00Z");
+    start.setUTCDate(start.getUTCDate() - 370);
+    const info = await fetchTencentKline(normalized, start.toISOString().slice(0, 10), endDate);
+    return { code: normalized, name: info.name };
+}
+
+async function fetchIndexInfo(code) {
+    const normalized = normalizeIndexCode(code);
+    const now = new Date();
+    const endDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const start = new Date(endDate + "T00:00:00Z");
+    start.setUTCDate(start.getUTCDate() - 370);
+    const info = await fetchTencentKline(normalized, start.toISOString().slice(0, 10), endDate);
+    return { code: normalized, name: info.name };
+}
+
 function splitDateRange(startDate, endDate, chunkDays = 700) {
     const ranges = [];
     let cursor = new Date(startDate + "T00:00:00Z");
@@ -68,7 +104,7 @@ function splitDateRange(startDate, endDate, chunkDays = 700) {
 async function fetchTencentKlineChunk(symbol, startDate, endDate) {
     const days = Math.ceil((new Date(endDate) - new Date(startDate)) / 86400000) + 40;
     const limit = Math.max(60, Math.min(800, days));
-    const url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=" +
+    const url = "https://proxy.finance.qq.com/ifzqgtimg/appstock/app/newfqkline/get?param=" +
         [symbol, "day", startDate, endDate, limit, "qfq"].join(",");
     const response = await fetch(url);
     if (!response.ok) throw new Error("腾讯行情请求失败：" + response.status);
@@ -79,7 +115,7 @@ async function fetchTencentKlineChunk(symbol, startDate, endDate) {
 }
 
 async function fetchTencentKline(code, startDate, endDate) {
-    const normalized = normalizeStockCode(code);
+    const normalized = normalizeSecurityCode(code);
     const [digits, market] = normalized.split(".");
     const symbol = market.toLowerCase() + digits;
     const chunks = await Promise.all(splitDateRange(startDate, endDate).map(range =>
@@ -94,7 +130,9 @@ async function fetchTencentKline(code, startDate, endDate) {
         name: node.qt && node.qt[symbol] ? node.qt[symbol][1] : normalized,
         rows: rawRows.map(row => ({
             date: row[0], open: Number(row[1]), close: Number(row[2]),
-            high: Number(row[3]), low: Number(row[4]), volume: Number(row[5]), amount: null
+            high: Number(row[3]), low: Number(row[4]), volume: Number(row[5]),
+            turnoverRate: Number.isFinite(Number(row[7])) ? Number(row[7]) : null,
+            amount: Number.isFinite(Number(row[8])) ? Number(row[8]) * 10000 : null
         })).filter(row => row.date >= startDate && row.date <= endDate)
     };
 }
@@ -140,25 +178,68 @@ function nearestClose(rows, date) {
     return close;
 }
 
-function buildValuationRows(dailyRows, financialRows, dividendRows, startDate, endDate) {
-    const dividendByDate = new Map();
-    dividendRows.forEach(row => {
-        const date = String(row.REPORT_DATE || "").slice(0, 10);
-        const value = Number(row.DIVIDENT_RATIO);
-        if (date && Number.isFinite(value) && !dividendByDate.has(date)) dividendByDate.set(date, value * 100);
+function datePart(value) {
+    return String(value || "").slice(0, 10);
+}
+
+function shiftYear(date, years) {
+    const value = new Date(date + "T00:00:00Z");
+    value.setUTCFullYear(value.getUTCFullYear() + years);
+    return value.toISOString().slice(0, 10);
+}
+
+function buildTtmEps(financialRows) {
+    const byDate = new Map();
+    financialRows.forEach(row => {
+        const date = datePart(row.REPORT_DATE);
+        if (date && !byDate.has(date)) byDate.set(date, row);
     });
+    const result = new Map();
+    byDate.forEach((row, date) => {
+        const current = Number(row.EPSJB);
+        if (!Number.isFinite(current)) return;
+        if (date.slice(5) === "12-31") {
+            result.set(date, current);
+            return;
+        }
+        const previousYear = String(Number(date.slice(0, 4)) - 1);
+        const previousAnnual = byDate.get(previousYear + "-12-31");
+        const previousPeriod = byDate.get(previousYear + date.slice(4));
+        const annualEps = Number(previousAnnual && previousAnnual.EPSJB);
+        const periodEps = Number(previousPeriod && previousPeriod.EPSJB);
+        if (Number.isFinite(annualEps) && Number.isFinite(periodEps)) {
+            result.set(date, current + annualEps - periodEps);
+        }
+    });
+    return result;
+}
+
+function buildCashDividends(dividendRows) {
+    if (!Array.isArray(dividendRows)) return null;
+    return dividendRows.map(row => ({
+        date: datePart(row.EX_DIVIDEND_DATE),
+        perShare: Number(row.PRETAX_BONUS_RMB) / 10,
+        progress: String(row.ASSIGN_PROGRESS || "")
+    })).filter(row => row.date && Number.isFinite(row.perShare) && row.perShare > 0 &&
+        (!row.progress || row.progress.includes("实施")));
+}
+
+function buildValuationRows(dailyRows, financialRows, dividendRows, startDate, endDate) {
+    const ttmEps = buildTtmEps(financialRows);
+    const cashDividends = buildCashDividends(dividendRows);
     const sourceRows = financialRows.map(row => {
-        const date = String(row.REPORT_DATE || "").slice(0, 10);
+        const date = datePart(row.REPORT_DATE);
         const close = nearestClose(dailyRows, date);
-        const month = Number(date.slice(5, 7));
-        const factor = month === 3 ? 4 : month === 6 ? 2 : month === 9 ? 4 / 3 : 1;
-        const eps = Number(row.EPSJB);
+        const eps = ttmEps.get(date);
         const bps = Number(row.BPS);
+        const dividendPerShare = cashDividends == null ? null : cashDividends
+            .filter(item => item.date > shiftYear(date, -1) && item.date <= date)
+            .reduce((sum, item) => sum + item.perShare, 0);
         return {
             date,
-            pe: close && eps > 0 ? close / (eps * factor) : null,
-            pb: close && bps > 0 ? close / bps : null,
-            dividendYield: dividendByDate.has(date) ? dividendByDate.get(date) : null
+            pe: close > 0 && eps > 0 ? close / eps : null,
+            pb: close > 0 && bps > 0 ? close / bps : null,
+            dividendYield: close > 0 && dividendPerShare != null ? dividendPerShare / close * 100 : null
         };
     }).filter(row => row.date >= startDate && row.date <= endDate).sort((a, b) => a.date.localeCompare(b.date));
     const previous = { pe: null, pb: null, dividendYield: null };
@@ -185,7 +266,7 @@ async function fetchStockHistory(code, startDate, endDate, onProgress = () => {}
     ]);
     const warnings = [];
     const financialRows = results[0].status === "fulfilled" ? results[0].value : [];
-    const dividendRows = results[1].status === "fulfilled" ? results[1].value : [];
+    const dividendRows = results[1].status === "fulfilled" ? results[1].value : null;
     if (results[0].status === "rejected") warnings.push("PE/PB 财报数据暂时不可用");
     if (results[1].status === "rejected") warnings.push("股息率数据暂时不可用");
     const dailyRows = calculateMovingAverages(kline.rows);
@@ -195,6 +276,19 @@ async function fetchStockHistory(code, startDate, endDate, onProgress = () => {}
         dailyRows,
         valuationRows: buildValuationRows(dailyRows, financialRows, dividendRows, startDate, endDate),
         warnings
+    };
+}
+
+async function fetchIndexHistory(code, startDate, endDate, onProgress = () => {}) {
+    const normalized = normalizeIndexCode(code);
+    onProgress("正在获取指数日 K…");
+    const kline = await fetchTencentKline(normalized, startDate, endDate);
+    return {
+        code: normalized,
+        name: kline.name,
+        dailyRows: calculateMovingAverages(kline.rows),
+        valuationRows: [],
+        warnings: []
     };
 }
 
@@ -235,6 +329,6 @@ async function fetchMarketHistory(startDate, endDate, onProgress = () => {}) {
 }
 
 export {
-    buildMarketRow, buildValuationRows, calculateMovingAverages, fetchMarketHistory, fetchStockHistory,
-    normalizeStockCode, splitDateRange
+    buildMarketRow, buildValuationRows, calculateMovingAverages, fetchIndexHistory, fetchIndexInfo, fetchMarketHistory,
+    fetchStockHistory, fetchStockInfo, normalizeIndexCode, normalizeSecurityCode, normalizeStockCode, splitDateRange
 };

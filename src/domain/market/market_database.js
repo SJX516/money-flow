@@ -1,9 +1,11 @@
 import initSqlJs from "sql.js";
 /* eslint import/no-webpack-loader-syntax: off */
 import sqlWasm from "!!file-loader?name=sql-wasm-[contenthash].wasm!sql.js/dist/sql-wasm.wasm";
+import { INDEX_GROUP_NAME } from "./market_constants";
 
-const MARKET_DB_VERSION = "2";
-const REQUIRED_TABLES = ["market_meta", "market_instrument", "stock_daily", "stock_valuation", "market_daily", "market_target"];
+const MARKET_DB_VERSION = "5";
+const REQUIRED_TABLES = ["market_meta", "market_instrument", "stock_daily", "stock_valuation", "market_daily",
+    "market_target", "stock_group", "stock_watchlist"];
 
 class MarketDatabase {
     constructor(db) {
@@ -29,10 +31,12 @@ class MarketDatabase {
     createSchema() {
         this.db.run("CREATE TABLE market_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
         this.db.run("CREATE TABLE market_instrument (code TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL, updated_at TEXT NOT NULL)");
-        this.db.run("CREATE TABLE stock_daily (code TEXT NOT NULL, trade_date TEXT NOT NULL, open REAL NOT NULL, close REAL NOT NULL, high REAL NOT NULL, low REAL NOT NULL, volume REAL, amount REAL, ma5 REAL, ma30 REAL, PRIMARY KEY (code, trade_date))");
+        this.db.run("CREATE TABLE stock_daily (code TEXT NOT NULL, trade_date TEXT NOT NULL, open REAL NOT NULL, close REAL NOT NULL, high REAL NOT NULL, low REAL NOT NULL, volume REAL, amount REAL, turnover_rate REAL, ma5 REAL, ma30 REAL, PRIMARY KEY (code, trade_date))");
         this.db.run("CREATE TABLE stock_valuation (code TEXT NOT NULL, report_date TEXT NOT NULL, pe REAL, pb REAL, dividend_yield REAL, pe_filled INTEGER NOT NULL DEFAULT 0, pb_filled INTEGER NOT NULL DEFAULT 0, dividend_filled INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (code, report_date))");
         this.db.run("CREATE TABLE market_daily (trade_date TEXT PRIMARY KEY, turnover_trillion REAL, margin_trillion REAL)");
         this.createTargetTable();
+        this.createWatchlistTables();
+        this.ensureIndexGroup();
         this.run("INSERT INTO market_meta (key, value) VALUES (?, ?)", ["db_version", MARKET_DB_VERSION]);
         this.run("INSERT INTO market_meta (key, value) VALUES (?, ?)", ["default_start_date", "2015-01-01"]);
         this.run("INSERT INTO market_meta (key, value) VALUES (?, ?)", ["default_end_date", this.today()]);
@@ -43,13 +47,51 @@ class MarketDatabase {
         this.db.run("CREATE INDEX idx_market_target_scope ON market_target(scope_code)");
     }
 
+    createWatchlistTables() {
+        this.db.run("CREATE TABLE IF NOT EXISTS stock_group (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)");
+        this.db.run("CREATE TABLE IF NOT EXISTS stock_watchlist (code TEXT PRIMARY KEY, name TEXT NOT NULL, group_id INTEGER, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, FOREIGN KEY(group_id) REFERENCES stock_group(id) ON DELETE SET NULL)");
+        this.db.run("CREATE INDEX IF NOT EXISTS idx_stock_watchlist_group ON stock_watchlist(group_id,sort_order)");
+    }
+
+    ensureIndexGroup() {
+        const existing = this.rows("SELECT * FROM stock_group WHERE name=?", [INDEX_GROUP_NAME])[0];
+        if (existing) return existing;
+        this.run("UPDATE stock_group SET sort_order=sort_order+1");
+        this.run("INSERT INTO stock_group (name,sort_order,created_at) VALUES (?,?,?)", [
+            INDEX_GROUP_NAME, 0, new Date().toISOString()
+        ]);
+        return this.rows("SELECT * FROM stock_group WHERE name=?", [INDEX_GROUP_NAME])[0];
+    }
+
     migrate() {
         const tables = new Set(this.rows("SELECT name FROM sqlite_master WHERE type='table'").map(row => row.name));
         if (!tables.has("market_meta")) return;
-        const version = this.getMeta("db_version");
+        let version = this.getMeta("db_version");
         if (version === "1") {
             this.transaction(() => {
                 this.createTargetTable();
+                this.setMeta("db_version", "2");
+            });
+            version = "2";
+        }
+        if (version === "2") {
+            this.transaction(() => {
+                this.createWatchlistTables();
+                this.setMeta("db_version", "3");
+            });
+            version = "3";
+        }
+        if (version === "3") {
+            this.transaction(() => {
+                const columns = this.rows("PRAGMA table_info(stock_daily)").map(row => row.name);
+                if (!columns.includes("turnover_rate")) this.run("ALTER TABLE stock_daily ADD COLUMN turnover_rate REAL");
+                this.setMeta("db_version", "4");
+            });
+            version = "4";
+        }
+        if (version === "4") {
+            this.transaction(() => {
+                this.ensureIndexGroup();
                 this.setMeta("db_version", MARKET_DB_VERSION);
             });
         }
@@ -103,6 +145,86 @@ class MarketDatabase {
         this.setMeta("default_end_date", endDate);
     }
 
+    listStockGroups() {
+        return this.rows("SELECT g.id,g.name,g.sort_order,COUNT(w.code) AS stock_count FROM stock_group g LEFT JOIN stock_watchlist w ON w.group_id=g.id GROUP BY g.id,g.name,g.sort_order ORDER BY g.sort_order,g.id");
+    }
+
+    getStockGroup(id) {
+        return this.rows("SELECT * FROM stock_group WHERE id=?", [id])[0] || null;
+    }
+
+    saveStockGroup(name) {
+        const row = this.rows("SELECT COALESCE(MAX(sort_order),-1)+1 AS next_order FROM stock_group")[0];
+        this.run("INSERT INTO stock_group (name,sort_order,created_at) VALUES (?,?,?)", [
+            name, row.next_order, new Date().toISOString()
+        ]);
+        return this.rows("SELECT * FROM stock_group WHERE id=last_insert_rowid()")[0];
+    }
+
+    moveStockGroup(id, direction) {
+        const groups = this.listStockGroups();
+        const index = groups.findIndex(group => group.id === id);
+        const targetIndex = index + direction;
+        if (index < 0 || targetIndex < 0 || targetIndex >= groups.length) return groups[index] || null;
+        const current = groups[index];
+        const target = groups[targetIndex];
+        this.transaction(() => {
+            this.run("UPDATE stock_group SET sort_order=? WHERE id=?", [target.sort_order, current.id]);
+            this.run("UPDATE stock_group SET sort_order=? WHERE id=?", [current.sort_order, target.id]);
+        });
+        return this.getStockGroup(id);
+    }
+
+    deleteStockGroup(id) {
+        const group = this.getStockGroup(id);
+        if (group && group.name === INDEX_GROUP_NAME) throw new Error("指数分组不可删除");
+        this.transaction(() => {
+            const row = this.rows("SELECT COALESCE(MAX(sort_order),-1)+1 AS next_order FROM stock_watchlist WHERE group_id IS NULL")[0];
+            const stocks = this.rows("SELECT code FROM stock_watchlist WHERE group_id=? ORDER BY sort_order,code", [id]);
+            stocks.forEach((stock, index) => this.run("UPDATE stock_watchlist SET group_id=NULL,sort_order=? WHERE code=?", [
+                row.next_order + index, stock.code
+            ]));
+            this.run("DELETE FROM stock_group WHERE id=?", [id]);
+        });
+    }
+
+    listWatchStocks() {
+        return this.rows("SELECT w.code,w.name,w.group_id,w.sort_order,g.name AS group_name,g.sort_order AS group_sort_order FROM stock_watchlist w LEFT JOIN stock_group g ON g.id=w.group_id ORDER BY CASE WHEN g.id IS NULL THEN 1 ELSE 0 END,g.sort_order,w.sort_order,w.code");
+    }
+
+    getWatchStock(code) {
+        return this.rows("SELECT * FROM stock_watchlist WHERE code=?", [code])[0] || null;
+    }
+
+    nextWatchOrder(groupId) {
+        const row = groupId == null
+            ? this.rows("SELECT COALESCE(MAX(sort_order),-1)+1 AS next_order FROM stock_watchlist WHERE group_id IS NULL")[0]
+            : this.rows("SELECT COALESCE(MAX(sort_order),-1)+1 AS next_order FROM stock_watchlist WHERE group_id=?", [groupId])[0];
+        return row.next_order;
+    }
+
+    saveWatchStock(code, name, groupId = null) {
+        const order = this.nextWatchOrder(groupId);
+        const existing = this.getWatchStock(code);
+        if (existing) {
+            this.run("UPDATE stock_watchlist SET name=?,group_id=?,sort_order=? WHERE code=?", [name, groupId, order, code]);
+        } else {
+            this.run("INSERT INTO stock_watchlist (code,name,group_id,sort_order,created_at) VALUES (?,?,?,?,?)", [
+                code, name, groupId, order, new Date().toISOString()
+            ]);
+        }
+        return this.getWatchStock(code);
+    }
+
+    moveWatchStock(code, groupId) {
+        this.run("UPDATE stock_watchlist SET group_id=?,sort_order=? WHERE code=?", [groupId, this.nextWatchOrder(groupId), code]);
+        return this.getWatchStock(code);
+    }
+
+    removeWatchStock(code) {
+        this.run("DELETE FROM stock_watchlist WHERE code=?", [code]);
+    }
+
     listInstruments(type = null) {
         const sql = "SELECT * FROM market_instrument" + (type ? " WHERE type=?" : "") + " ORDER BY code";
         return this.rows(sql, type ? [type] : []);
@@ -130,8 +252,9 @@ class MarketDatabase {
         this.transaction(() => {
             if (replace) this.removeStock(code);
             this.saveInstrument({ code, name, type: "stock", startDate, endDate });
-            dailyRows.forEach(row => this.run("INSERT OR REPLACE INTO stock_daily (code,trade_date,open,close,high,low,volume,amount,ma5,ma30) VALUES (?,?,?,?,?,?,?,?,?,?)", [
-                code, row.date, row.open, row.close, row.high, row.low, row.volume, row.amount, row.ma5, row.ma30
+            dailyRows.forEach(row => this.run("INSERT OR REPLACE INTO stock_daily (code,trade_date,open,close,high,low,volume,amount,turnover_rate,ma5,ma30) VALUES (?,?,?,?,?,?,?,?,?,?,?)", [
+                code, row.date, row.open, row.close, row.high, row.low, row.volume, row.amount,
+                row.turnoverRate == null ? null : row.turnoverRate, row.ma5, row.ma30
             ]));
             valuationRows.forEach(row => this.run("INSERT OR REPLACE INTO stock_valuation (code,report_date,pe,pb,dividend_yield,pe_filled,pb_filled,dividend_filled) VALUES (?,?,?,?,?,?,?,?)", [
                 code, row.date, row.pe, row.pb, row.dividendYield, row.peFilled ? 1 : 0, row.pbFilled ? 1 : 0, row.dividendFilled ? 1 : 0

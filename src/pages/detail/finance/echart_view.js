@@ -3,7 +3,7 @@ import React, { useEffect, useRef } from "react";
 
 const EMPTY_EVENTS = {};
 
-function EChartView({ option, height = 420, ariaLabel, onEvents = EMPTY_EVENTS, onWheel, onPlotClick }) {
+function EChartView({ option, height = 420, ariaLabel, onEvents = EMPTY_EVENTS, onWheel, onPlotClick, activeDataIndex }) {
     const ref = useRef(null);
     const chartRef = useRef(null);
     const onWheelRef = useRef(onWheel);
@@ -33,6 +33,12 @@ function EChartView({ option, height = 420, ariaLabel, onEvents = EMPTY_EVENTS, 
     }, [option]);
     useEffect(() => {
         const chart = chartRef.current;
+        if (!chart || activeDataIndex == null || activeDataIndex < 0) return;
+        chart.dispatchAction({ type: "updateAxisPointer", xAxisIndex: 0, value: activeDataIndex });
+        chart.dispatchAction({ type: "showTip", seriesIndex: 0, dataIndex: activeDataIndex });
+    }, [option, activeDataIndex]);
+    useEffect(() => {
+        const chart = chartRef.current;
         if (!chart) return undefined;
         Object.entries(onEvents).forEach(([event, handler]) => chart.on(event, handler));
         return () => Object.entries(onEvents).forEach(([event, handler]) => chart.off(event, handler));
@@ -41,6 +47,7 @@ function EChartView({ option, height = 420, ariaLabel, onEvents = EMPTY_EVENTS, 
         const element = ref.current;
         if (!element || !onWheel) return undefined;
         const wheel = event => {
+            if (!event.ctrlKey) return;
             event.preventDefault();
             event.stopPropagation();
             const rect = element.getBoundingClientRect();

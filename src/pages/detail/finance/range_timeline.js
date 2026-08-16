@@ -12,7 +12,7 @@ function RangeTimeline({ minDate, maxDate, startDate, endDate, disabled, onChang
     const timer = useRef(null);
     useEffect(() => setDraft([startDate, endDate]), [startDate, endDate]);
     useEffect(() => () => timer.current && clearTimeout(timer.current), []);
-    const presets = [{ label: "近6个月", months: 6 }, { label: "近1年", months: 12 },
+    const presets = [{ label: "近3个月", months: 3 }, { label: "近6个月", months: 6 }, { label: "近1年", months: 12 },
         { label: "近3年", months: 36 }, { label: "近5年", months: 60 }, { label: "全部", months: null }];
     const choosePreset = months => {
         const range = presetDateRange(minDate, maxDate, months);
@@ -23,7 +23,7 @@ function RangeTimeline({ minDate, maxDate, startDate, endDate, disabled, onChang
     const option = useMemo(() => ({ animation: false, grid: { left: 18, right: 18, top: 5, height: 1 },
         xAxis: { type: "time", min: minDate, max: maxDate, show: false }, yAxis: { type: "value", show: false },
         series: [{ type: "line", data: [[minDate, 0], [maxDate, 0]], showSymbol: false, lineStyle: { color: "#64748b" } }],
-        dataZoom: [{ type: "slider", start, end, bottom: 4, height: 22, brushSelect: false,
+        dataZoom: [{ type: "slider", start, end, left: 72, right: 72, bottom: 4, height: 22, brushSelect: false,
             borderColor: "#d9e2ec", backgroundColor: "#f8fafc", fillerColor: "rgba(22,119,255,.16)",
             dataBackground: { lineStyle: { color: "#b6c7dd" }, areaStyle: { color: "#eaf1f8" } },
             selectedDataBackground: { lineStyle: { color: "#69b1ff" }, areaStyle: { color: "#bae0ff" } },

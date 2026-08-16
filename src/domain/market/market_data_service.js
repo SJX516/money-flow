@@ -1,16 +1,23 @@
 import { App } from "../../app";
 import InvestmentService from "../service/investment_service";
 import { InvestmentType } from "../entity/investment";
+import { calculateFinancingActivity } from "./market_activity";
+import { INDEX_GROUP_NAME } from "./market_constants";
 import MarketDatabase from "./market_database";
-import { fetchMarketHistory, fetchStockHistory, normalizeStockCode } from "./market_provider";
+import { fetchIndexHistory, fetchIndexInfo, fetchMarketHistory, fetchStockHistory, fetchStockInfo,
+    normalizeIndexCode, normalizeSecurityCode, normalizeStockCode } from "./market_provider";
 import { TARGET_COLORS, targetMetrics } from "./market_target";
 import { deriveDailyValuation } from "./market_valuation";
 
 function sortStockOptions(stocks) {
-    const group = stock => stock.hasHolding && stock.hasData ? 0 : stock.hasHolding ? 1 : stock.hasData ? 2 : 3;
+    const groupOrder = stock => stock.groupSortOrder != null && Number.isFinite(Number(stock.groupSortOrder))
+        ? Number(stock.groupSortOrder) : Number.MAX_SAFE_INTEGER;
+    const stockOrder = stock => stock.hasHolding && stock.hasData ? 0 : stock.hasHolding ? 1 : stock.hasData ? 2 : 3;
     return stocks.sort((a, b) => {
-        const groupDiff = group(a) - group(b);
+        const groupDiff = groupOrder(a) - groupOrder(b);
         if (groupDiff) return groupDiff;
+        const stockDiff = stockOrder(a) - stockOrder(b);
+        if (stockDiff) return stockDiff;
         if (a.hasHolding && b.hasHolding && b.holdingAmount !== a.holdingAmount) return b.holdingAmount - a.holdingAmount;
         return a.code.localeCompare(b.code);
     });
@@ -29,12 +36,17 @@ class MarketDataService {
     static async createDb() {
         App.marketDb = await MarketDatabase.create();
         App.marketDbName = "新建行情数据库（尚未导出）";
+        this.syncKnownStocks();
         return App.marketDb;
     }
 
     static async loadDb(file) {
-        App.marketDb = await MarketDatabase.load(file);
+        const db = await MarketDatabase.load(file);
+        const [startDate] = db.getDefaultRange();
+        db.setDefaultRange(startDate, db.today());
+        App.marketDb = db;
         App.marketDbName = file && file.name ? file.name : "已导入行情数据库";
+        this.syncKnownStocks();
         return App.marketDb;
     }
 
@@ -62,7 +74,7 @@ class MarketDataService {
     }
 
     static validateTarget(scopeCode, metric, targetValue, color) {
-        const scope = scopeCode === "MARKET" ? "MARKET" : normalizeStockCode(scopeCode);
+        const scope = scopeCode === "MARKET" ? "MARKET" : normalizeSecurityCode(scopeCode);
         if (!targetMetrics(scope).some(item => item.key === metric)) throw new Error("目标指标不适用于当前标的");
         const value = Number(targetValue);
         if (!Number.isFinite(value)) throw new Error("请输入有效的目标值");
@@ -123,22 +135,127 @@ class MarketDataService {
         return result;
     }
 
+    static getStockGroups() {
+        return this.requireDb().listStockGroups().map(group => ({
+            ...group, isSystem: group.name === INDEX_GROUP_NAME, isIndex: group.name === INDEX_GROUP_NAME
+        }));
+    }
+
+    static getIndexGroup() {
+        return this.getStockGroups().find(group => group.isIndex) || null;
+    }
+
+    static getWatchStocks() {
+        return this.requireDb().listWatchStocks();
+    }
+
+    static syncKnownStocks() {
+        const db = this.requireDb();
+        const stocks = new Map(db.listStockSummaries().map(stock => [stock.code, stock]));
+        this.getPersonalStocks().forEach(stock => {
+            if (!stocks.has(stock.code)) stocks.set(stock.code, stock);
+        });
+        stocks.forEach(stock => {
+            if (!db.getWatchStock(stock.code)) db.saveWatchStock(stock.code, stock.name, null);
+        });
+        return db.listWatchStocks();
+    }
+
+    static normalizeGroupId(groupId) {
+        if (groupId == null) return null;
+        const id = Number(groupId);
+        if (!Number.isInteger(id) || !this.requireDb().getStockGroup(id)) throw new Error("股票分组不存在");
+        return id;
+    }
+
+    static addStockGroup(name) {
+        const normalized = String(name || "").trim();
+        if (!normalized) throw new Error("请输入分组名称");
+        if (normalized.length > 20) throw new Error("分组名称不能超过 20 个字符");
+        if (this.getStockGroups().some(group => group.name === normalized)) throw new Error("分组名称已存在");
+        return this.requireDb().saveStockGroup(normalized);
+    }
+
+    static deleteStockGroup(groupId) {
+        const id = this.normalizeGroupId(groupId);
+        if (this.requireDb().getStockGroup(id)?.name === INDEX_GROUP_NAME) throw new Error("指数分组不可删除");
+        this.requireDb().deleteStockGroup(id);
+    }
+
+    static moveStockGroup(groupId, direction) {
+        const id = this.normalizeGroupId(groupId);
+        const offset = direction === "before" ? -1 : direction === "after" ? 1 : 0;
+        if (!offset) throw new Error("分组移动方向无效");
+        return this.requireDb().moveStockGroup(id, offset);
+    }
+
+    static async addWatchStock(code, groupId = null, options = {}) {
+        const digits = String(code || "").trim();
+        if (!/^\d{6}$/.test(digits)) throw new Error("请输入 6 位数字股票代码");
+        const normalized = normalizeStockCode(digits);
+        const db = this.requireDb();
+        if (db.getWatchStock(normalized)) throw new Error("该股票已在观察列表中");
+        const targetGroupId = this.normalizeGroupId(groupId);
+        const info = await (options.fetchInfo || fetchStockInfo)(normalized);
+        return db.saveWatchStock(normalized, info.name, targetGroupId);
+    }
+
+    static async addIndex(code, options = {}) {
+        const normalized = normalizeIndexCode(code);
+        const db = this.requireDb();
+        if (db.getWatchStock(normalized)) throw new Error("该指数已在观察列表中");
+        const group = this.getIndexGroup();
+        if (!group) throw new Error("指数分组不存在，请重新导入行情数据库");
+        const info = await (options.fetchInfo || fetchIndexInfo)(normalized);
+        return db.saveWatchStock(normalized, info.name, group.id);
+    }
+
+    static moveWatchStock(code, groupId) {
+        const normalized = normalizeSecurityCode(code);
+        const db = this.requireDb();
+        if (!db.getWatchStock(normalized)) throw new Error("观察股票不存在");
+        return db.moveWatchStock(normalized, this.normalizeGroupId(groupId));
+    }
+
+    static removeWatchStock(code) {
+        const normalized = normalizeSecurityCode(code);
+        const db = this.requireDb();
+        if (!db.getWatchStock(normalized)) throw new Error("观察股票不存在");
+        db.removeWatchStock(normalized);
+    }
+
     static getStockOptions() {
         const map = new Map();
         this.getPersonalStocks().forEach(stock => map.set(stock.code, stock));
+        if (this.isReady()) this.requireDb().listWatchStocks().forEach(stock => map.set(stock.code, {
+            ...map.get(stock.code), code: stock.code, name: stock.name,
+            groupId: stock.group_id, groupName: stock.group_name, groupSortOrder: stock.group_sort_order,
+            isWatched: true
+        }));
         if (this.isReady()) this.requireDb().listStockSummaries().forEach(stock => map.set(stock.code, {
             ...map.get(stock.code), ...stock, hasData: Number(stock.row_count) > 0, latestDate: stock.latest_date
         }));
         const stocks = Array.from(map.values()).map(stock => ({
-            ...stock, hasHolding: Boolean(stock.hasHolding), hasData: Boolean(stock.hasData), holdingAmount: Number(stock.holdingAmount) || 0
+            ...stock, hasHolding: Boolean(stock.hasHolding), hasData: Boolean(stock.hasData), isWatched: Boolean(stock.isWatched),
+            holdingAmount: Number(stock.holdingAmount) || 0, isIndex: stock.groupName === INDEX_GROUP_NAME
         }));
         return sortStockOptions(stocks);
+    }
+
+    static getIndexOptions() {
+        return this.getStockOptions().filter(stock => stock.isIndex);
+    }
+
+    static isIndexSecurity(code) {
+        const normalized = normalizeSecurityCode(code);
+        const watched = this.requireDb().listWatchStocks().find(stock => stock.code === normalized);
+        return Boolean(watched && watched.group_name === INDEX_GROUP_NAME);
     }
 
     static async buildStock(code, name, startDate, endDate, options = {}) {
         this.validateRange(startDate, endDate);
         const db = this.requireDb();
-        const normalized = normalizeStockCode(code);
+        const normalized = normalizeSecurityCode(code);
         const existing = db.getInstrument(normalized);
         if (existing && !options.replace && !options.append) return { skipped: true, instrument: existing };
         let actualStart = startDate;
@@ -150,8 +267,11 @@ class MarketDataService {
             actualStart = overlap.toISOString().slice(0, 10);
             if (actualStart < existing.start_date) actualStart = existing.start_date;
         }
-        const data = await fetchStockHistory(normalized, actualStart, endDate, options.onProgress);
-        if (options.append && existing) {
+        const isIndex = this.isIndexSecurity(normalized);
+        const data = isIndex
+            ? await fetchIndexHistory(normalized, actualStart, endDate, options.onProgress)
+            : await fetchStockHistory(normalized, actualStart, endDate, options.onProgress);
+        if (!isIndex && options.append && existing) {
             const previousRows = db.getStockValuation(normalized, "1900-01-01", actualStart);
             this.mergePriorValuation(data.valuationRows, previousRows[previousRows.length - 1]);
         }
@@ -179,11 +299,11 @@ class MarketDataService {
     }
 
     static removeStock(code) {
-        this.requireDb().removeStock(normalizeStockCode(code));
+        this.requireDb().removeStock(normalizeSecurityCode(code));
     }
 
     static async rebuildStock(code, name, startDate, endDate, onProgress) {
-        const normalized = normalizeStockCode(code);
+        const normalized = normalizeSecurityCode(code);
         this.requireDb().removeStock(normalized);
         return this.buildStock(normalized, name, startDate, endDate, { onProgress });
     }
@@ -199,8 +319,10 @@ class MarketDataService {
         return { skipped: false, instrument: db.getInstrument("MARKET"), rows: rows.length };
     }
 
-    static async rebuildAll(startDate, endDate, onProgress = () => {}) {
-        const stocks = this.listStocks();
+    static async rebuildAll(startDate, endDate, onProgress = () => {}, groupId = null) {
+        const groupCodes = groupId == null ? null : new Set(this.requireDb().listWatchStocks()
+            .filter(stock => stock.group_id === Number(groupId)).map(stock => stock.code));
+        const stocks = this.listStocks().filter(stock => groupCodes == null || groupCodes.has(stock.code));
         const errors = [];
         for (let index = 0; index < stocks.length; index++) {
             const stock = stocks[index];
@@ -218,9 +340,12 @@ class MarketDataService {
         return { count: stocks.length };
     }
 
-    static async fillAll(endDate, onProgress = () => {}) {
+    static async fillAll(endDate, onProgress = () => {}, groupId = null) {
         const db = this.requireDb();
-        const summaries = db.listStockSummaries().filter(stock => Number(stock.row_count) > 0);
+        const groupCodes = groupId == null ? null : new Set(db.listWatchStocks()
+            .filter(stock => stock.group_id === Number(groupId)).map(stock => stock.code));
+        const summaries = db.listStockSummaries().filter(stock => Number(stock.row_count) > 0 &&
+            (groupCodes == null || groupCodes.has(stock.code)));
         const errors = [];
         for (let index = 0; index < summaries.length; index++) {
             const stock = summaries[index];
@@ -242,7 +367,7 @@ class MarketDataService {
 
     static getStockData(code, startDate, endDate) {
         const db = this.requireDb();
-        const normalized = normalizeStockCode(code);
+        const normalized = normalizeSecurityCode(code);
         const instrument = db.getInstrument(normalized);
         const daily = db.getStockDaily(normalized, startDate, endDate);
         const allDaily = db.getStockDaily(normalized, instrument?.start_date || "1900-01-01", endDate);
@@ -252,13 +377,15 @@ class MarketDataService {
         return {
             instrument,
             daily,
+            chipHistory: allDaily,
             valuation,
             trades: this.getPersonalTrades(normalized)
         };
     }
 
     static getMarketData(startDate, endDate) {
-        return this.requireDb().getMarketDaily(startDate, endDate);
+        return calculateFinancingActivity(this.requireDb().getMarketDaily("1900-01-01", endDate))
+            .filter(row => row.trade_date >= startDate);
     }
 
     static getPersonalTrades(code) {

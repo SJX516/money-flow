@@ -44,6 +44,7 @@ class InitPage extends React.Component {
                 }
             }
         }
+        if (MarketDataService.isReady()) MarketDataService.syncKnownStocks();
         const marketReady = MarketDataService.isReady();
         const range = marketReady ? MarketDataService.getDefaultRange() : [this.state.marketStartDate, this.state.marketEndDate];
         this.setState({ combinedLoading: false, marketReady, marketStartDate: range[0], marketEndDate: range[1],
@@ -59,6 +60,7 @@ class InitPage extends React.Component {
         if (!files || !files[0]) return;
         try {
             await App.initDb(files[0]);
+            if (MarketDataService.isReady()) MarketDataService.syncKnownStocks();
             message.success("个人数据库已导入");
             this.props.onDbReady();
         } catch (error) {

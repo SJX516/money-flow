@@ -6,8 +6,12 @@ import InvestmentService from "../domain/service/investment_service";
 import { InvestmentType } from "../domain/entity/investment";
 import { SummaryService } from "../domain/service/summary_service";
 import { compactNumber, dateToDay, dayToDate, mapTradesToRows, presetDateRange, zoomDateRange } from "../pages/detail/finance/chart_utils";
-import { buildMarketRow, buildValuationRows, calculateMovingAverages, normalizeStockCode, splitDateRange } from "../domain/market/market_provider";
+import { autoExportMarketUpdate } from "../pages/detail/finance/finance_page_state";
+import { buildMarketRow, buildValuationRows, calculateMovingAverages, normalizeIndexCode, normalizeSecurityCode,
+    normalizeStockCode, splitDateRange } from "../domain/market/market_provider";
 import { deriveDailyValuation } from "../domain/market/market_valuation";
+import { calculateChipDistribution, calculateChipTrend } from "../domain/market/market_chip";
+import { calculateFinancingActivity } from "../domain/market/market_activity";
 
 describe("独立行情数据", () => {
     test("展示时间轴日期与刻度可双向转换", () => {
@@ -16,10 +20,19 @@ describe("独立行情数据", () => {
     });
 
     test("展示时间轴快捷范围按全局结束日回溯并受开始日限制", () => {
+        expect(presetDateRange("2015-01-01", "2026-08-09", 3)).toEqual(["2026-05-09", "2026-08-09"]);
         expect(presetDateRange("2015-01-01", "2026-08-09", 6)).toEqual(["2026-02-09", "2026-08-09"]);
         expect(presetDateRange("2015-01-01", "2026-08-09", 36)).toEqual(["2023-08-09", "2026-08-09"]);
         expect(presetDateRange("2026-06-01", "2026-08-31", 12)).toEqual(["2026-06-01", "2026-08-31"]);
         expect(presetDateRange("2015-01-01", "2026-08-09", null)).toEqual(["2015-01-01", "2026-08-09"]);
+    });
+
+    test("行情更新成功后自动导出一次且跳过构建时不导出", () => {
+        const exportDb = jest.fn();
+        expect(autoExportMarketUpdate({ rows: 100 }, true, exportDb)).toBe(true);
+        expect(autoExportMarketUpdate({ skipped: true }, true, exportDb)).toBe(false);
+        expect(autoExportMarketUpdate({ rows: 100 }, false, exportDb)).toBe(false);
+        expect(exportDb).toHaveBeenCalledTimes(1);
     });
 
     test("图表数量级按万和亿格式化", () => {
@@ -45,15 +58,18 @@ describe("独立行情数据", () => {
         expect(mapped[2]).toEqual(expect.objectContaining({ price: 0.42, markerPrice: 0.42, markerAdjusted: false }));
     });
 
-    test("股票选项按有持仓有数据、持仓金额、仅持仓、仅数据排序", () => {
+    test("股票选项先按分组排序并在组内沿用持仓和行情排序", () => {
         const rows = sortStockOptions([
-            { code: "600003.SH", hasHolding: false, hasData: false, holdingAmount: 0 },
-            { code: "600002.SH", hasHolding: true, hasData: false, holdingAmount: 500 },
-            { code: "600004.SH", hasHolding: false, hasData: true, holdingAmount: 0 },
-            { code: "600001.SH", hasHolding: true, hasData: true, holdingAmount: 1000 },
-            { code: "600005.SH", hasHolding: true, hasData: true, holdingAmount: 2000 }
+            { code: "600006.SH", groupSortOrder: null, hasHolding: true, hasData: true, holdingAmount: 3000 },
+            { code: "600003.SH", groupSortOrder: 0, hasHolding: false, hasData: false, holdingAmount: 0 },
+            { code: "600002.SH", groupSortOrder: 1, hasHolding: true, hasData: false, holdingAmount: 500 },
+            { code: "600004.SH", groupSortOrder: 0, hasHolding: false, hasData: true, holdingAmount: 0 },
+            { code: "600001.SH", groupSortOrder: 0, hasHolding: true, hasData: true, holdingAmount: 1000 },
+            { code: "600005.SH", groupSortOrder: 0, hasHolding: true, hasData: true, holdingAmount: 2000 }
         ]);
-        expect(rows.map(row => row.code)).toEqual(["600005.SH", "600001.SH", "600002.SH", "600004.SH", "600003.SH"]);
+        expect(rows.map(row => row.code)).toEqual([
+            "600005.SH", "600001.SH", "600004.SH", "600003.SH", "600002.SH", "600006.SH"
+        ]);
     });
 
     test("股票图滚轮缩放围绕鼠标位置并限制在全局范围", () => {
@@ -69,6 +85,11 @@ describe("独立行情数据", () => {
         expect(normalizeStockCode("512000")).toBe("512000.SH");
         expect(() => normalizeStockCode("830001")).toThrow("仅支持沪深");
         expect(() => normalizeStockCode("600519.SZ")).toThrow("不匹配");
+        expect(normalizeIndexCode("000001")).toBe("000001.SH");
+        expect(normalizeIndexCode("1a0001")).toBe("000001.SH");
+        expect(normalizeIndexCode("399001")).toBe("399001.SZ");
+        expect(normalizeIndexCode("899050")).toBe("899050.BJ");
+        expect(normalizeSecurityCode("000688.SH")).toBe("000688.SH");
     });
 
     test("MA5 和 MA30 仅在足够窗口后产生", () => {
@@ -94,22 +115,66 @@ describe("独立行情数据", () => {
         });
     });
 
-    test("财报期估值按收盘价计算且缺失股息率沿用并标记", () => {
+    test("财报期 PE 和股息率使用滚动十二个月口径", () => {
         const daily = [
-            { date: "2025-03-31", close: 20 },
-            { date: "2025-06-30", close: 24 },
-            { date: "2025-09-30", close: 30 }
+            { date: "2025-03-31", close: 26 },
+            { date: "2025-06-30", close: 28 },
+            { date: "2025-09-30", close: 30 },
+            { date: "2025-12-31", close: 32 }
         ];
         const financial = [
-            { REPORT_DATE: "2025-03-31 00:00:00", EPSJB: 1, BPS: 5 },
-            { REPORT_DATE: "2025-06-30 00:00:00", EPSJB: 2, BPS: 6 },
-            { REPORT_DATE: "2025-09-30 00:00:00", EPSJB: 3, BPS: 10 }
+            { REPORT_DATE: "2024-03-31 00:00:00", EPSJB: 0.2, BPS: 4 },
+            { REPORT_DATE: "2024-06-30 00:00:00", EPSJB: 0.5, BPS: 4 },
+            { REPORT_DATE: "2024-09-30 00:00:00", EPSJB: 0.8, BPS: 4 },
+            { REPORT_DATE: "2024-12-31 00:00:00", EPSJB: 1.2, BPS: 4 },
+            { REPORT_DATE: "2025-03-31 00:00:00", EPSJB: 0.3, BPS: 5 },
+            { REPORT_DATE: "2025-06-30 00:00:00", EPSJB: 0.7, BPS: 7 },
+            { REPORT_DATE: "2025-09-30 00:00:00", EPSJB: 1.1, BPS: 10 },
+            { REPORT_DATE: "2025-12-31 00:00:00", EPSJB: 1.6, BPS: 16 }
         ];
-        const dividends = [{ REPORT_DATE: "2025-03-31 00:00:00", DIVIDENT_RATIO: 0.02 }];
+        const dividends = [
+            { EX_DIVIDEND_DATE: "2024-04-01 00:00:00", PRETAX_BONUS_RMB: 1, ASSIGN_PROGRESS: "实施分配" },
+            { EX_DIVIDEND_DATE: "2024-10-01 00:00:00", PRETAX_BONUS_RMB: 2, ASSIGN_PROGRESS: "实施分配" },
+            { EX_DIVIDEND_DATE: "2025-03-20 00:00:00", PRETAX_BONUS_RMB: 3, ASSIGN_PROGRESS: "实施分配" },
+            { EX_DIVIDEND_DATE: "2025-05-01 00:00:00", PRETAX_BONUS_RMB: 10, ASSIGN_PROGRESS: "预案" }
+        ];
         const rows = buildValuationRows(daily, financial, dividends, "2025-01-01", "2025-12-31");
-        expect(rows[0]).toEqual(expect.objectContaining({ pe: 5, pb: 4, dividendYield: 2, dividendFilled: false }));
-        expect(rows[1]).toEqual(expect.objectContaining({ pe: 6, pb: 4, dividendYield: 2, dividendFilled: true }));
-        expect(rows[2].pe).toBe(7.5);
+        expect(rows.map(row => row.pe)).toEqual([20, 20, 20, 20]);
+        expect(rows[0]).toEqual(expect.objectContaining({ pb: 5.2, dividendYield: 2.3077, dividendFilled: false }));
+        expect(rows[1].dividendYield).toBe(1.7857);
+        expect(rows[2].dividendYield).toBe(1.6667);
+        expect(rows[3].dividendYield).toBe(0.9375);
+    });
+
+    test("筹码分布按换手衰减归一化并返回成本区间", () => {
+        const rows = [
+            { trade_date: "2026-08-12", open: 9, close: 10, high: 11, low: 9, turnover_rate: 10 },
+            { trade_date: "2026-08-13", open: 10, close: 11, high: 12, low: 10, turnover_rate: 20 },
+            { trade_date: "2026-08-14", open: 11, close: 12, high: 13, low: 11, turnover_rate: 30 }
+        ];
+        const result = calculateChipDistribution(rows, "2026-08-14");
+        expect(result.status).toBe("ready");
+        expect(result.points.reduce((sum, point) => sum + point.percent, 0)).toBeCloseTo(100, 2);
+        expect(result.medianCost).toBeGreaterThanOrEqual(9);
+        expect(result.medianCost).toBeLessThanOrEqual(13);
+        expect(result.cost70.low).toBeLessThanOrEqual(result.cost70.high);
+        expect(result.profitRatio).toBeGreaterThan(0);
+        const trend = calculateChipTrend(rows, rows.map(row => row.trade_date));
+        expect(trend[2]).toEqual(expect.objectContaining({
+            date: "2026-08-14", medianCost: result.medianCost, profitRatio: result.profitRatio
+        }));
+        expect(trend.every(item => item.points == null)).toBe(true);
+    });
+
+    test("筹码计算遇到旧库缺失换手率时要求重建", () => {
+        const rows = [{
+            trade_date: "2026-08-14", open: 10, close: 11, high: 12, low: 9, turnover_rate: null
+        }];
+        const result = calculateChipDistribution(rows, "2026-08-14");
+        expect(result).toEqual(expect.objectContaining({ status: "missing-turnover", date: "2026-08-14" }));
+        expect(calculateChipTrend(rows, ["2026-08-14"])[0]).toEqual(expect.objectContaining({
+            status: "missing-turnover", medianCost: null, profitRatio: null
+        }));
     });
 
     test("日度估值按最近财报基数随每日收盘价变化且不受沿用节点重置", () => {
@@ -138,6 +203,36 @@ describe("独立行情数据", () => {
         expect(row.date).toBe("2026-08-06");
         expect(row.marginTrillion).toBeCloseTo(2.6156, 4);
         expect(row.turnoverTrillion).toBeCloseTo(2.5475, 4);
+    });
+
+    test("融资活跃度按融资余额变化量占两市成交额计算并保留正负", () => {
+        const result = calculateFinancingActivity([
+            { trade_date: "2026-08-12", turnover_trillion: 1, margin_trillion: 2 },
+            { trade_date: "2026-08-13", turnover_trillion: 1.25, margin_trillion: 2.0125 },
+            { trade_date: "2026-08-14", turnover_trillion: 0.5, margin_trillion: 2.0025 }
+        ]);
+        expect(result[0].financing_activity).toBeNull();
+        expect(result[1]).toEqual(expect.objectContaining({
+            margin_change_trillion: 0.0125, financing_activity: 1
+        }));
+        expect(result[2]).toEqual(expect.objectContaining({
+            margin_change_trillion: -0.01, financing_activity: -2
+        }));
+        expect(calculateFinancingActivity([
+            { trade_date: "2026-08-12", turnover_trillion: 1, margin_trillion: null },
+            { trade_date: "2026-08-13", turnover_trillion: 1, margin_trillion: 2 }
+        ])[1].financing_activity).toBeNull();
+    });
+
+    test("可见大盘区间首日使用上一交易日余额计算融资活跃度", async () => {
+        App.marketDb = await MarketDatabase.create();
+        App.marketDb.saveMarket("2026-08-12", "2026-08-14", [
+            { date: "2026-08-12", turnoverTrillion: 1, marginTrillion: 2 },
+            { date: "2026-08-13", turnoverTrillion: 1.25, marginTrillion: 2.0125 },
+            { date: "2026-08-14", turnoverTrillion: 0.5, marginTrillion: 2.0025 }
+        ]);
+        const visible = MarketDataService.getMarketData("2026-08-13", "2026-08-14");
+        expect(visible.map(row => row.financing_activity)).toEqual([1, -2]);
     });
 
     test("个人数据库摘要返回最新可展示理财月份", async () => {
@@ -194,6 +289,23 @@ describe("独立行情数据", () => {
         rebuild.mockRestore();
     });
 
+    test("大盘页一键重建只处理指数分组中的已构建标的", async () => {
+        const db = await MarketDatabase.create();
+        const indexGroup = db.listStockGroups().find(group => group.name === "指数");
+        db.saveStock("000001.SH", "虚构指数", "2025-01-01", "2025-01-02", [], []);
+        db.saveStock("600001.SH", "普通股票", "2025-01-01", "2025-01-02", [], []);
+        db.saveWatchStock("000001.SH", "虚构指数", indexGroup.id);
+        db.saveWatchStock("600001.SH", "普通股票", null);
+        App.marketDb = db;
+        const rebuild = jest.spyOn(MarketDataService, "rebuildStock").mockResolvedValue({});
+
+        await MarketDataService.rebuildAll("2020-01-01", "2026-01-01", () => {}, indexGroup.id);
+
+        expect(rebuild).toHaveBeenCalledTimes(1);
+        expect(rebuild.mock.calls[0][0]).toBe("000001.SH");
+        rebuild.mockRestore();
+    });
+
     test("一键补齐只处理已有日K股票并从实际最后交易日继续", async () => {
         const db = await MarketDatabase.create();
         db.saveStock("600001.SH", "已有数据", "2025-01-01", "2025-01-02", [{ date: "2025-01-02", open: 1, close: 1, high: 1, low: 1, volume: null, amount: null, ma5: null, ma30: null }], []);
@@ -242,6 +354,40 @@ describe("独立行情数据", () => {
         expect(upgraded.listTargets("600519.SH")).toEqual([]);
     });
 
+    test("导入行情库时保留起始日期并将默认截至日期更新为当天", async () => {
+        const source = await MarketDatabase.create();
+        source.setDefaultRange("2020-01-01", "2025-12-31");
+        const bytes = source.db.export();
+        const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+        const today = jest.spyOn(MarketDatabase.prototype, "today").mockReturnValue("2026-08-16");
+
+        await MarketDataService.loadDb({ name: "行情.db", arrayBuffer: async () => buffer });
+
+        expect(MarketDataService.getDefaultRange()).toEqual(["2020-01-01", "2026-08-16"]);
+        expect(App.marketDbName).toBe("行情.db");
+        today.mockRestore();
+    });
+
+    test("加载行情库时将库内股票补到未分组且保留已有分组", async () => {
+        const source = await MarketDatabase.create();
+        const group = source.saveStockGroup("核心");
+        source.saveStock("600001.SH", "已分组股票", "2025-01-01", "2025-01-02", [], []);
+        source.saveStock("600002.SH", "待同步股票", "2025-01-01", "2025-01-02", [], []);
+        source.saveWatchStock("600001.SH", "已分组股票", group.id);
+        const bytes = source.db.export();
+        const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+
+        await MarketDataService.loadDb({ name: "同步测试.db", arrayBuffer: async () => buffer });
+
+        const stocks = MarketDataService.getWatchStocks();
+        expect(stocks.find(stock => stock.code === "600001.SH")).toEqual(expect.objectContaining({
+            group_id: group.id, group_name: "核心"
+        }));
+        expect(stocks.find(stock => stock.code === "600002.SH")).toEqual(expect.objectContaining({
+            group_id: null, group_name: null
+        }));
+    });
+
     test("股票与大盘目标指标保存、查询和删除", async () => {
         const db = await MarketDatabase.create();
         const stockTarget = db.saveTarget("600519.SH", "price", 1450, "可以买入", "#22c55e");
@@ -258,11 +404,149 @@ describe("独立行情数据", () => {
         expect(db.listTargets("600519.SH")).toEqual([]);
     });
 
+    test("v2 行情库升级后新增观察列表表并保留版本兼容", async () => {
+        const legacy = await MarketDatabase.create();
+        legacy.run("DROP INDEX idx_stock_watchlist_group");
+        legacy.run("DROP TABLE stock_watchlist");
+        legacy.run("DROP TABLE stock_group");
+        legacy.setMeta("db_version", "2");
+        const bytes = legacy.db.export();
+        const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+
+        const upgraded = await MarketDatabase.load({ arrayBuffer: async () => buffer });
+
+        expect(upgraded.getMeta("db_version")).toBe(MARKET_DB_VERSION);
+        expect(upgraded.listStockGroups()).toEqual([
+            expect.objectContaining({ name: "指数", stock_count: 0 })
+        ]);
+        expect(upgraded.listWatchStocks()).toEqual([]);
+    });
+
+    test("v3 行情库升级后新增换手率列并保留原日 K", async () => {
+        const legacy = await MarketDatabase.create();
+        legacy.saveStock("600519.SH", "贵州茅台", "2025-01-01", "2025-01-02", [{
+            date: "2025-01-02", open: 10, close: 11, high: 12, low: 9,
+            volume: 100, amount: 1000, turnoverRate: 1.5, ma5: null, ma30: null
+        }], []);
+        legacy.run("ALTER TABLE stock_daily RENAME TO stock_daily_v4");
+        legacy.run("CREATE TABLE stock_daily (code TEXT NOT NULL, trade_date TEXT NOT NULL, open REAL NOT NULL, close REAL NOT NULL, high REAL NOT NULL, low REAL NOT NULL, volume REAL, amount REAL, ma5 REAL, ma30 REAL, PRIMARY KEY (code, trade_date))");
+        legacy.run("INSERT INTO stock_daily (code,trade_date,open,close,high,low,volume,amount,ma5,ma30) SELECT code,trade_date,open,close,high,low,volume,amount,ma5,ma30 FROM stock_daily_v4");
+        legacy.run("DROP TABLE stock_daily_v4");
+        legacy.setMeta("db_version", "3");
+        const bytes = legacy.db.export();
+        const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+
+        const upgraded = await MarketDatabase.load({ arrayBuffer: async () => buffer });
+
+        expect(upgraded.getMeta("db_version")).toBe(MARKET_DB_VERSION);
+        expect(upgraded.rows("PRAGMA table_info(stock_daily)").map(row => row.name)).toContain("turnover_rate");
+        expect(upgraded.getStockDaily("600519.SH", "2025-01-01", "2025-12-31")[0]).toEqual(expect.objectContaining({
+            close: 11, turnover_rate: null
+        }));
+    });
+
+    test("v4 行情库升级后创建不可删除的指数分组", async () => {
+        const legacy = await MarketDatabase.create();
+        legacy.run("DELETE FROM stock_group WHERE name='指数'");
+        legacy.saveStockGroup("普通分组");
+        legacy.setMeta("db_version", "4");
+        const bytes = legacy.db.export();
+        const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+
+        const upgraded = await MarketDatabase.load({ arrayBuffer: async () => buffer });
+        const groups = upgraded.listStockGroups();
+        expect(groups.map(group => group.name)).toEqual(["指数", "普通分组"]);
+        expect(() => upgraded.deleteStockGroup(groups[0].id)).toThrow("不可删除");
+    });
+
+    test("观察股票支持创建分组、移动、删除分组和取消观察", async () => {
+        const db = await MarketDatabase.create();
+        const valueGroup = db.saveStockGroup("价值");
+        const growthGroup = db.saveStockGroup("成长");
+        db.saveWatchStock("600519.SH", "贵州茅台", valueGroup.id);
+
+        expect(db.listStockGroups()).toEqual([
+            expect.objectContaining({ name: "指数", stock_count: 0 }),
+            expect.objectContaining({ name: "价值", stock_count: 1 }),
+            expect.objectContaining({ name: "成长", stock_count: 0 })
+        ]);
+        expect(db.listWatchStocks()[0]).toEqual(expect.objectContaining({
+            code: "600519.SH", name: "贵州茅台", group_name: "价值"
+        }));
+
+        db.moveWatchStock("600519.SH", growthGroup.id);
+        expect(db.listWatchStocks()[0].group_name).toBe("成长");
+        db.deleteStockGroup(growthGroup.id);
+        expect(db.listWatchStocks()[0]).toEqual(expect.objectContaining({ group_id: null, group_name: null }));
+        db.removeWatchStock("600519.SH");
+        expect(db.listWatchStocks()).toEqual([]);
+    });
+
+    test("股票分组可调整顺序并始终将未分组排在最后", async () => {
+        const db = await MarketDatabase.create();
+        const first = db.saveStockGroup("第一组");
+        db.saveStockGroup("第二组");
+        const third = db.saveStockGroup("第三组");
+        db.saveWatchStock("600001.SH", "第一组股票", first.id);
+        db.saveWatchStock("600002.SH", "第三组股票", third.id);
+        db.saveWatchStock("600003.SH", "未分组股票", null);
+        App.marketDb = db;
+
+        MarketDataService.moveStockGroup(third.id, "before");
+
+        expect(db.listStockGroups().map(group => group.name)).toEqual(["指数", "第一组", "第三组", "第二组"]);
+        expect(db.listWatchStocks().map(stock => stock.code)).toEqual(["600001.SH", "600002.SH", "600003.SH"]);
+        const bytes = db.db.export();
+        const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+        const reloaded = await MarketDatabase.load({ arrayBuffer: async () => buffer });
+        expect(reloaded.listStockGroups().map(group => group.name)).toEqual(["指数", "第一组", "第三组", "第二组"]);
+    });
+
+    test("通过六位代码添加观察股票并在筛选数据中携带分组", async () => {
+        App.marketDb = await MarketDatabase.create();
+        const group = MarketDataService.addStockGroup("核心观察");
+        const stock = await MarketDataService.addWatchStock("600519", group.id, {
+            fetchInfo: async code => ({ code, name: "虚构股票" })
+        });
+
+        expect(stock.code).toBe("600519.SH");
+        expect(MarketDataService.getStockOptions()).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                code: "600519.SH", name: "虚构股票", groupName: "核心观察", isWatched: true
+            })
+        ]));
+        await expect(MarketDataService.addWatchStock("60051", group.id, {
+            fetchInfo: async code => ({ code, name: "无效股票" })
+        })).rejects.toThrow("6 位数字");
+        await expect(MarketDataService.addWatchStock("600519", group.id, {
+            fetchInfo: async code => ({ code, name: "重复股票" })
+        })).rejects.toThrow("已在观察列表");
+    });
+
+    test("指数只能添加到系统指数分组且股票可移动到该分组", async () => {
+        App.marketDb = await MarketDatabase.create();
+        const indexGroup = MarketDataService.getIndexGroup();
+        const index = await MarketDataService.addIndex("1A0001", {
+            fetchInfo: async code => ({ code, name: "虚构上证指数" })
+        });
+        const normalGroup = MarketDataService.addStockGroup("普通股票");
+        await MarketDataService.addWatchStock("600519", normalGroup.id, {
+            fetchInfo: async code => ({ code, name: "虚构股票" })
+        });
+
+        expect(index).toEqual(expect.objectContaining({ code: "000001.SH", group_id: indexGroup.id }));
+        expect(MarketDataService.getIndexOptions().map(item => item.code)).toEqual(["000001.SH"]);
+        MarketDataService.moveWatchStock("600519.SH", indexGroup.id);
+        expect(MarketDataService.getIndexOptions().map(item => item.code)).toEqual(["000001.SH", "600519.SH"]);
+        expect(() => MarketDataService.deleteStockGroup(indexGroup.id)).toThrow("不可删除");
+    });
+
     test("行情 DB 独立保存股票、大盘、默认范围并支持按股票移除", async () => {
         const db = await MarketDatabase.create();
         db.setDefaultRange("2020-01-01", "2026-01-01");
         db.saveStock("600519.SH", "贵州茅台", "2025-01-01", "2025-01-02", [{
-            date: "2025-01-02", open: 10, close: 11, high: 12, low: 9, volume: 100, amount: 1000, ma5: null, ma30: null
+            date: "2025-01-02", open: 10, close: 11, high: 12, low: 9, volume: 100, amount: 1000,
+            turnoverRate: 1.5, ma5: null, ma30: null
         }], [{ date: "2025-03-31", pe: 10, pb: 2, dividendYield: 3, peFilled: false, pbFilled: false, dividendFilled: false }]);
         db.saveMarket("2025-01-01", "2025-01-02", [{ date: "2025-01-02", turnoverTrillion: 1.2, marginTrillion: 1.8 }]);
         db.saveTarget("600519.SH", "pe", 20, "重建保留", "#ef4444");
@@ -275,7 +559,9 @@ describe("独立行情数据", () => {
         expect(db.getStockLatestDate("600519.SH")).toBe("2025-01-02");
 
         expect(db.listInstruments()).toHaveLength(2);
-        expect(db.getStockDaily("600519.SH", "2025-01-01", "2025-12-31")[0].close).toBe(11);
+        expect(db.getStockDaily("600519.SH", "2025-01-01", "2025-12-31")[0]).toEqual(expect.objectContaining({
+            close: 11, turnover_rate: 1.5
+        }));
         expect(db.getStockValuation("600519.SH", "2025-01-01", "2025-12-31")[0].dividend_yield).toBe(3);
         expect(db.getMarketDaily("2025-01-01", "2025-12-31")[0].turnover_trillion).toBe(1.2);
 
