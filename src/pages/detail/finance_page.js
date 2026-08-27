@@ -1,10 +1,10 @@
 import {
-    Alert, Button, Card, Checkbox, Col, Divider, Layout, Popconfirm, Row, Select,
+    Alert, Button, Card, Col, Layout, Popconfirm, Row, Select,
     Space, Spin, Tabs, Typography, message
 } from "antd";
 import React from "react";
 import MarketDataService from "../../domain/market/market_data_service";
-import { MarketAmountChart, ValuationChart } from "./finance/market_charts";
+import { FinancialDataChart, MarketAmountChart, ValuationChart } from "./finance/market_charts";
 import { StockKlinePanel } from "./finance/chip_distribution_chart";
 import RangeTimeline from "./finance/range_timeline";
 import { zoomDateRange } from "./finance/chart_utils";
@@ -25,9 +25,9 @@ class FinancePage extends React.Component {
             dbReady: MarketDataService.isReady(), stocks: [], selectedCode: null, selectedIndexCode: null,
             startDate: "2015-01-01", endDate,
             viewStartDate: viewRange[0], viewEndDate: viewRange[1], stockData: null, indexData: null,
-            marketData: [], metrics: ["pe", "pb", "dividend"], stockTargets: [], marketTargets: [], stockGroups: [],
+            marketData: [], metrics: ["pe", "peg"], stockTargets: [], marketTargets: [], stockGroups: [],
             marketSelectedDate: null, loading: false, progress: "", activeTab: "stock",
-            managerVisible: false, indexManagerVisible: false
+            managerVisible: false, indexManagerVisible: false, stockSelectedDate: null
         };
     }
 
@@ -107,6 +107,8 @@ class FinancePage extends React.Component {
         this.setState({ selectedCode: code }, this.loadViews);
     }
 
+    selectStockDate = date => this.setState({ stockSelectedDate: date });
+
     selectIndex = code => this.setState({ selectedIndexCode: code }, this.loadViews);
 
     selectMarketDate = date => this.setState(state => state.marketSelectedDate === date ? null : { marketSelectedDate: date });
@@ -122,6 +124,10 @@ class FinancePage extends React.Component {
         return result;
     }, replace ? "股票历史已重建并自动导出" : "股票历史构建完成并自动导出", { autoExport: true });
 
+    fillStock = () => this.run("正在补齐当前股票…", onProgress =>
+        MarketDataService.fillStock(this.state.selectedCode, today(), onProgress),
+        "当前股票已补齐并自动导出", { autoExport: true });
+
     buildIndex = replace => this.run(replace ? "正在重建指数历史…" : "正在构建指数历史…", async onProgress => {
         const code = this.state.selectedIndexCode;
         const index = this.state.stocks.find(item => item.code === code);
@@ -131,6 +137,15 @@ class FinancePage extends React.Component {
             : MarketDataService.buildStock(code, name, this.state.startDate, this.state.endDate, { onProgress });
     }, replace ? "指数历史已重建并自动导出" : "指数历史构建完成并自动导出",
     { autoExport: true, indexAction: true });
+
+    fillIndex = () => this.run("正在补齐当前指数…", onProgress =>
+        MarketDataService.fillStock(this.state.selectedIndexCode, today(), onProgress),
+        "当前指数已补齐并自动导出", { autoExport: true, indexAction: true });
+
+    rebuildMarket = () => this.run("正在重建成交额历史…", async onProgress => {
+        MarketDataService.removeMarket();
+        return MarketDataService.buildMarket(this.state.startDate, this.state.endDate, { onProgress });
+    }, "成交额历史已重建并自动导出", { autoExport: true });
 
     removeStock = () => {
         MarketDataService.removeStock(this.state.selectedCode);
@@ -143,6 +158,12 @@ class FinancePage extends React.Component {
         MarketDataService.removeStock(this.state.selectedIndexCode);
         message.success("已从行情 DB 移除该指数历史");
         this.refreshState(this.state.selectedCode, this.state.selectedIndexCode);
+    }
+
+    removeMarket = () => {
+        MarketDataService.removeMarket();
+        message.success("已移除成交额历史");
+        this.refreshState();
     }
 
     changeViewRange = (viewStartDate, viewEndDate, load = false) => {
@@ -256,7 +277,7 @@ class FinancePage extends React.Component {
     }
 
     renderStockTab() {
-        const { dbReady, stocks, stockGroups, selectedCode, stockData, stockTargets, metrics, loading, progress, managerVisible } = this.state;
+        const { dbReady, stocks, stockGroups, selectedCode, stockData, stockTargets, metrics, loading, progress, managerVisible, stockSelectedDate } = this.state;
         const built = selectedCode && MarketDataService.isReady() && MarketDataService.listStocks().some(item => item.code === selectedCode);
         return <>
             <Card size="small" title="股票数据管理" style={{ marginBottom: 16 }}>
@@ -268,22 +289,22 @@ class FinancePage extends React.Component {
                         </Select.Option>)}
                     </Select></Col>
                     <Col><Button disabled={!dbReady || loading} onClick={() => this.setState({ managerVisible: true })}>管理股票列表</Button></Col>
-                    <Col><Button type="primary" disabled={!dbReady || loading || !selectedCode} onClick={() => this.buildStock(false)}>构建历史</Button></Col>
-                    <Col><Popconfirm title="确认从行情 DB 移除该股票？个人财务记录不会删除。" onConfirm={this.removeStock}>
-                        <Button danger disabled={!built || loading}>移除</Button>
+                    <Col><Popconfirm title="将先移除该股票旧数据，再重新获取完整历史，确认继续？" onConfirm={() => this.buildStock(true)}>
+                        <Button type="primary" disabled={!dbReady || loading || !selectedCode}>重新构建</Button>
                     </Popconfirm></Col>
+                    <Col><Button disabled={!built || loading} onClick={this.fillStock}>补齐</Button></Col>
+                    <Col flex="auto" />
+                    <Col><Space wrap>
+                        <Popconfirm title="将依次删除并重建全部股票历史，可能耗时较长，确认继续？"
+                            onConfirm={() => this.run("准备一键重建…", onProgress => MarketDataService.rebuildAll(this.state.startDate, this.state.endDate, onProgress),
+                                "全部历史已重建并自动导出", { autoExport: true })}>
+                            <Button disabled={!dbReady || loading}>一键重建全部</Button>
+                        </Popconfirm>
+                        <Button disabled={!dbReady || loading} onClick={() => this.run("准备补齐全部数据…",
+                            onProgress => MarketDataService.fillAll(today(), onProgress), "全部股票已补齐并自动导出", { autoExport: true })}>一键补齐全部</Button>
+                        {loading && <><Spin size="small" /><Text>{progress}</Text></>}
+                    </Space></Col>
                 </Row>
-                <Divider style={{ margin: "14px 0" }} />
-                <Space wrap>
-                    <Popconfirm title="将依次删除并重建全部股票历史，可能耗时较长，确认继续？"
-                        onConfirm={() => this.run("准备一键重建…", onProgress => MarketDataService.rebuildAll(this.state.startDate, this.state.endDate, onProgress),
-                            "全部历史已重建并自动导出", { autoExport: true })}>
-                        <Button disabled={!dbReady || loading}>一键重建全部</Button>
-                    </Popconfirm>
-                    <Button disabled={!dbReady || loading} onClick={() => this.run("准备补齐全部数据…",
-                        onProgress => MarketDataService.fillAll(today(), onProgress), "全部股票已补齐并自动导出", { autoExport: true })}>一键补齐全部</Button>
-                    {loading && <><Spin size="small" /><Text>{progress}</Text></>}
-                </Space>
             </Card>
             <StockListManager visible={managerVisible} disabled={!dbReady || loading} groups={stockGroups} stocks={stocks}
                 onClose={() => this.setState({ managerVisible: false })} onAddStock={this.addWatchStock}
@@ -293,13 +314,16 @@ class FinancePage extends React.Component {
             {!stockData ? <Alert type="info" showIcon message="请选择并构建一只股票，图表只读取独立行情 DB 中的数据。" /> : <>
                 <Card title={stockData.instrument.name + "（" + stockData.instrument.code + "）"}>
                     <StockKlinePanel key={stockData.instrument.code} rows={stockData.daily} historyRows={stockData.chipHistory}
-                        trades={stockData.trades} targets={stockTargets} onRangeWheel={this.handleStockWheel} />
+                        trades={stockData.trades} targets={stockTargets} onRangeWheel={this.handleStockWheel}
+                        selectedDate={stockSelectedDate} onDateChange={this.selectStockDate} />
                     {this.renderTimeline({ marginTop: 12 })}
                 </Card>
-                <Card style={{ marginTop: 16 }} title="财报期估值变化" extra={<Checkbox.Group value={metrics}
-                    options={[{ label: "PE（TTM）", value: "pe" }, { label: "PB", value: "pb" }, { label: "股息率（TTM）", value: "dividend" }]}
-                    onChange={value => this.setState({ metrics: value })} />}>
-                    <ValuationChart rows={stockData.valuation} metrics={metrics} targets={stockTargets} />
+                <Card style={{ marginTop: 16 }} title="财报期估值变化">
+                    <ValuationChart rows={stockData.valuation} metrics={metrics} targets={stockTargets}
+                        activeDate={stockSelectedDate} onDateChange={this.selectStockDate} />
+                </Card>
+                <Card style={{ marginTop: 16 }} title="财报期数据">
+                    <FinancialDataChart rows={stockData.valuation} activeDate={stockSelectedDate} onDateChange={this.selectStockDate} />
                 </Card>
             </>}
             {selectedCode && <TargetManager scopeCode={selectedCode} title="股票目标指标" targets={stockTargets}
@@ -308,23 +332,22 @@ class FinancePage extends React.Component {
     }
 
     renderMarketTab() {
-        const { dbReady, loading, progress, marketData, marketTargets, startDate, endDate, stocks, stockGroups,
+        const { dbReady, loading, progress, marketData, marketTargets, stocks, stockGroups,
             selectedIndexCode, indexData, indexManagerVisible } = this.state;
         const indices = stocks.filter(stock => stock.isIndex);
         const indexGroup = stockGroups.find(group => group.isIndex);
         const builtIndex = selectedIndexCode && MarketDataService.isReady() &&
             MarketDataService.listStocks().some(item => item.code === selectedIndexCode);
+        const marketBuilt = dbReady && Number(MarketDataService.getDatabaseOverview().market.row_count) > 0;
         return <>
             <Card size="small" style={{ marginBottom: 16 }}>
-                <Space>
-                    <Button type="primary" disabled={!dbReady || loading} onClick={() => this.run("正在构建大盘历史…",
-                        onProgress => MarketDataService.buildMarket(startDate, endDate, { onProgress }),
-                        "大盘历史构建完成并自动导出", { autoExport: true })}>构建大盘历史</Button>
-                    <Popconfirm title="将删除大盘历史后重新拉取，确认继续？" onConfirm={() => this.run("正在重建大盘历史…",
-                        onProgress => MarketDataService.buildMarket(startDate, endDate, { replace: true, onProgress }),
-                        "大盘历史已重建并自动导出", { autoExport: true })}>
-                        <Button disabled={!dbReady || loading}>重新构建大盘</Button>
+                <Space wrap>
+                    <Popconfirm title="将先移除全部成交额与融资余额历史，再重新获取完整数据，确认继续？" onConfirm={this.rebuildMarket}>
+                        <Button type="primary" disabled={!dbReady || loading}>重新构建</Button>
                     </Popconfirm>
+                    <Button disabled={!marketBuilt || loading} onClick={() => this.run("正在补齐成交额…",
+                        onProgress => MarketDataService.fillMarket(today(), onProgress),
+                        "成交额已补齐并自动导出", { autoExport: true })}>补齐</Button>
                     {loading && <><Spin size="small" /><Text>{progress}</Text></>}
                 </Space>
             </Card>
@@ -339,24 +362,22 @@ class FinancePage extends React.Component {
                     <Col><Button disabled={!dbReady || loading || !indexGroup}
                         onClick={() => this.setState({ indexManagerVisible: true })}>管理指数列表</Button></Col>
                     <Col><Button type="primary" disabled={!dbReady || loading || !selectedIndexCode}
-                        onClick={() => this.buildIndex(false)}>构建历史</Button></Col>
-                    <Col><Popconfirm title="确认从行情 DB 移除该指数历史？指数仍保留在列表中。" onConfirm={this.removeIndex}>
-                        <Button danger disabled={!builtIndex || loading}>移除</Button>
-                    </Popconfirm></Col>
+                        onClick={() => this.buildIndex(true)}>重新构建</Button></Col>
+                    <Col><Button disabled={!builtIndex || loading} onClick={this.fillIndex}>补齐</Button></Col>
+                    <Col flex="auto" />
+                    <Col><Space wrap>
+                        <Popconfirm title="将依次删除并重建指数分组中已构建的全部历史，确认继续？"
+                            onConfirm={() => this.run("准备一键重建指数…", onProgress => MarketDataService.rebuildAll(
+                                this.state.startDate, this.state.endDate, onProgress, indexGroup && indexGroup.id),
+                            "指数历史已全部重建并自动导出", { autoExport: true, indexAction: true })}>
+                            <Button disabled={!dbReady || loading || !indexGroup}>一键重建</Button>
+                        </Popconfirm>
+                        <Button disabled={!dbReady || loading || !indexGroup} onClick={() => this.run("准备补齐指数数据…",
+                            onProgress => MarketDataService.fillAll(today(), onProgress, indexGroup && indexGroup.id),
+                            "指数历史已全部补齐并自动导出", { autoExport: true, indexAction: true })}>一键补齐</Button>
+                        {loading && <><Spin size="small" /><Text>{progress}</Text></>}
+                    </Space></Col>
                 </Row>
-                <Divider style={{ margin: "14px 0" }} />
-                <Space wrap>
-                    <Popconfirm title="将依次删除并重建指数分组中已构建的全部历史，确认继续？"
-                        onConfirm={() => this.run("准备一键重建指数…", onProgress => MarketDataService.rebuildAll(
-                            this.state.startDate, this.state.endDate, onProgress, indexGroup && indexGroup.id),
-                        "指数历史已全部重建并自动导出", { autoExport: true, indexAction: true })}>
-                        <Button disabled={!dbReady || loading || !indexGroup}>一键重建</Button>
-                    </Popconfirm>
-                    <Button disabled={!dbReady || loading || !indexGroup} onClick={() => this.run("准备补齐指数数据…",
-                        onProgress => MarketDataService.fillAll(today(), onProgress, indexGroup && indexGroup.id),
-                        "指数历史已全部补齐并自动导出", { autoExport: true, indexAction: true })}>一键补齐</Button>
-                    {loading && <><Spin size="small" /><Text>{progress}</Text></>}
-                </Space>
             </Card>
             <StockListManager visible={indexManagerVisible} disabled={!dbReady || loading} mode="index"
                 fixedGroupId={indexGroup && indexGroup.id} groups={stockGroups} stocks={stocks}

@@ -146,6 +146,24 @@ describe("独立行情数据", () => {
         expect(rows[3].dividendYield).toBe(0.9375);
     });
 
+    test("TTM 扣非利润增速使用相邻财报节点环比", () => {
+        const daily = ["2024-03-31", "2024-06-30", "2024-12-31", "2025-03-31", "2025-06-30"]
+            .map(date => ({ date, close: 10 }));
+        const financial = [
+            { REPORT_DATE: "2024-03-31", EPSJB: 0.1, KCFJCXSYJLR: 100 },
+            { REPORT_DATE: "2024-06-30", EPSJB: 0.2, KCFJCXSYJLR: 200 },
+            { REPORT_DATE: "2024-12-31", EPSJB: 1, KCFJCXSYJLR: 1000 },
+            { REPORT_DATE: "2025-03-31", EPSJB: 0.2, KCFJCXSYJLR: 110 },
+            { REPORT_DATE: "2025-06-30", EPSJB: 0.4, KCFJCXSYJLR: 220 }
+        ];
+        const rows = buildValuationRows(daily, financial, [], "2024-01-01", "2025-12-31");
+        const march = rows.find(row => row.date === "2025-03-31");
+        const june = rows.find(row => row.date === "2025-06-30");
+        expect(march.ttmKcfjNetProfit).toBe(1010);
+        expect(june.ttmKcfjNetProfit).toBe(1020);
+        expect(june.ttmKcfjGrowth).toBeCloseTo((1020 / 1010 - 1) * 100, 4);
+    });
+
     test("筹码分布按换手衰减归一化并返回成本区间", () => {
         const rows = [
             { trade_date: "2026-08-12", open: 9, close: 10, high: 11, low: 9, turnover_rate: 10 },
@@ -185,13 +203,13 @@ describe("独立行情数据", () => {
             { trade_date: "2025-07-01", close: 30 }
         ];
         const nodes = [
-            { report_date: "2025-03-31", pe: 5, pb: 4, dividend_yield: 2, pe_filled: 0, pb_filled: 0, dividend_filled: 0 },
-            { report_date: "2025-06-30", pe: 5, pb: 4, dividend_yield: 2, pe_filled: 1, pb_filled: 1, dividend_filled: 1 }
+            { report_date: "2025-03-31", pe: 5, pb: 4, dividend_yield: 2, ttm_kcfj_net_profit: 1000, ttm_kcfj_growth: 20, pe_filled: 0, pb_filled: 0, dividend_filled: 0 },
+            { report_date: "2025-06-30", pe: 5, pb: 4, dividend_yield: 2, ttm_kcfj_net_profit: 1100, ttm_kcfj_growth: 25, pe_filled: 1, pb_filled: 1, dividend_filled: 1 }
         ];
         const result = deriveDailyValuation(daily, nodes);
-        expect(result[0]).toEqual(expect.objectContaining({ pe: 5, pb: 4, dividend_yield: 2, source_report_date: "2025-03-31" }));
-        expect(result[1]).toEqual(expect.objectContaining({ pe: 5.5, pb: 4.4, dividend_yield: 1.8182 }));
-        expect(result[2]).toEqual(expect.objectContaining({ pe: 6, pb: 4.8, dividend_yield: 1.6667, source_report_date: "2025-06-30" }));
+        expect(result[0]).toEqual(expect.objectContaining({ pe: 5, pb: 4, dividend_yield: 2, ttm_kcfj_net_profit: 1000, ttm_kcfj_growth: 20, peg: 0.25, source_report_date: "2025-03-31" }));
+        expect(result[1]).toEqual(expect.objectContaining({ pe: 5.5, pb: 4.4, dividend_yield: 1.8182, ttm_kcfj_net_profit: 1000, ttm_kcfj_growth: 20, peg: 0.275 }));
+        expect(result[2]).toEqual(expect.objectContaining({ pe: 6, pb: 4.8, dividend_yield: 1.6667, ttm_kcfj_net_profit: 1100, ttm_kcfj_growth: 25, peg: 0.24, source_report_date: "2025-06-30" }));
         expect(result[3]).toEqual(expect.objectContaining({ pe: 7.5, pb: 6, dividend_yield: 1.3333 }));
     });
 
@@ -233,6 +251,39 @@ describe("独立行情数据", () => {
         ]);
         const visible = MarketDataService.getMarketData("2026-08-13", "2026-08-14");
         expect(visible.map(row => row.financing_activity)).toEqual([1, -2]);
+    });
+
+    test("补齐成交额从数据库实际最后一天续接到指定日期", async () => {
+        App.marketDb = await MarketDatabase.create();
+        App.marketDb.saveMarket("2026-08-01", "2026-08-20", [
+            { date: "2026-08-18", turnoverTrillion: 1.2, marginTrillion: 2.1 }
+        ]);
+        const fetchHistory = jest.fn(async () => [
+            { date: "2026-08-19", turnoverTrillion: 1.3, marginTrillion: 2.11 }
+        ]);
+
+        await MarketDataService.fillMarket("2026-08-27", () => {}, { fetchHistory });
+
+        expect(fetchHistory).toHaveBeenCalledWith("2026-08-18", "2026-08-27", expect.any(Function));
+        expect(App.marketDb.getMarketDaily("2026-08-01", "2026-08-27").map(row => row.trade_date))
+            .toEqual(["2026-08-18", "2026-08-19"]);
+        expect(App.marketDb.getInstrument("MARKET")).toEqual(expect.objectContaining({
+            start_date: "2026-08-01", end_date: "2026-08-27"
+        }));
+    });
+
+    test("移除成交额历史时保留大盘目标指标", async () => {
+        App.marketDb = await MarketDatabase.create();
+        App.marketDb.saveMarket("2026-08-01", "2026-08-20", [
+            { date: "2026-08-18", turnoverTrillion: 1.2, marginTrillion: 2.1 }
+        ]);
+        App.marketDb.saveTarget("MARKET", "turnover_trillion", 1, "成交低迷", "#3b82f6");
+
+        MarketDataService.removeMarket();
+
+        expect(App.marketDb.getMarketDaily("2026-08-01", "2026-08-27")).toEqual([]);
+        expect(App.marketDb.getInstrument("MARKET")).toBeNull();
+        expect(App.marketDb.listTargets("MARKET")).toHaveLength(1);
     });
 
     test("个人数据库摘要返回最新可展示理财月份", async () => {
@@ -318,6 +369,43 @@ describe("独立行情数据", () => {
         expect(build.mock.calls[0][0]).toBe("600001.SH");
         expect(progress[0]).toContain("从 2025-01-02 补齐到 2026-01-01");
         build.mockRestore();
+    });
+
+    test("增量补齐保留历史均线计算上下文并修复已有 MA 缺口", async () => {
+        const db = await MarketDatabase.create();
+        const dates = [];
+        for (let date = new Date("2026-05-01T00:00:00Z"); date <= new Date("2026-08-27T00:00:00Z");
+            date.setUTCDate(date.getUTCDate() + 1)) {
+            if (date.getUTCDay() > 0 && date.getUTCDay() < 6) dates.push(date.toISOString().slice(0, 10));
+        }
+        const rowForDate = date => {
+            const close = dates.indexOf(date) + 1;
+            return { date, open: close, close, high: close, low: close, volume: 1, amount: 1,
+                turnoverRate: 1, ma5: null, ma30: null };
+        };
+        const existingRows = calculateMovingAverages(dates.filter(date => date <= "2026-08-20").map(rowForDate));
+        const expected = new Map(existingRows.map(row => [row.date, { ma5: row.ma5, ma30: row.ma30 }]));
+        db.saveStock("002920.SZ", "德赛西威", "2026-05-01", "2026-08-20", existingRows, []);
+        db.run("UPDATE stock_daily SET ma5=NULL,ma30=NULL WHERE code=? AND trade_date>=? AND trade_date<=?", [
+            "002920.SZ", "2026-07-03", "2026-08-20"
+        ]);
+        App.marketDb = db;
+        const fetchHistory = jest.fn(async (code, startDate, endDate) => ({
+            code, name: "德赛西威",
+            dailyRows: calculateMovingAverages(dates.filter(date => date >= startDate && date <= endDate).map(rowForDate)),
+            valuationRows: [], warnings: []
+        }));
+
+        await MarketDataService.buildStock("002920.SZ", "德赛西威", "2026-05-01", "2026-08-27", {
+            append: true, fetchHistory
+        });
+
+        expect(fetchHistory.mock.calls[0].slice(0, 3)).toEqual(["002920.SZ", "2026-07-06", "2026-08-27"]);
+        const repaired = db.getStockDaily("002920.SZ", "2026-07-03", "2026-08-20");
+        repaired.forEach(row => expect({ ma5: row.ma5, ma30: row.ma30 }).toEqual(expected.get(row.trade_date)));
+        expect(repaired.every(row => row.ma5 != null && row.ma30 != null)).toBe(true);
+        expect(db.getStockDaily("002920.SZ", "2026-08-21", "2026-08-27")
+            .every(row => row.ma5 != null && row.ma30 != null)).toBe(true);
     });
 
     test("增量补齐跨批次沿用最后财报值并标记", () => {

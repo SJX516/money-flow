@@ -188,6 +188,16 @@ function shiftYear(date, years) {
     return value.toISOString().slice(0, 10);
 }
 
+function numberValue(value) {
+    if (value == null || value === "") return NaN;
+    return Number(String(value).replace(/,/g, ""));
+}
+
+function kcfjValue(row) {
+    const key = Object.keys(row || {}).find(name => /^KCFJCXSYJLR?$/.test(name) || name === "KCFJCX_NET_PROFIT");
+    return numberValue(key ? row[key] : null);
+}
+
 function buildTtmEps(financialRows) {
     const byDate = new Map();
     financialRows.forEach(row => {
@@ -214,6 +224,35 @@ function buildTtmEps(financialRows) {
     return result;
 }
 
+function buildTtmKcfj(financialRows) {
+    const byDate = new Map();
+    financialRows.forEach(row => { const date = datePart(row.REPORT_DATE); if (date && !byDate.has(date)) byDate.set(date, row); });
+    const values = new Map();
+    byDate.forEach((row, date) => {
+        const current = kcfjValue(row);
+        if (!Number.isFinite(current)) return;
+        let ttm = current;
+        if (date.slice(5) !== "12-31") {
+            const y = String(Number(date.slice(0, 4)) - 1);
+            const annualRow = byDate.get(y + "-12-31");
+            const priorRow = byDate.get(y + date.slice(4));
+            const annual = kcfjValue(annualRow);
+            const prior = kcfjValue(priorRow);
+            if (!Number.isFinite(annual) || !Number.isFinite(prior)) return;
+            ttm = current + annual - prior;
+        }
+        values.set(date, ttm);
+    });
+    const result = new Map();
+    const dates = [...values.keys()].sort();
+    dates.forEach((date, index) => {
+        const value = values.get(date);
+        const previous = index > 0 ? values.get(dates[index - 1]) : null;
+        result.set(date, { value, growth: Number.isFinite(previous) && previous !== 0 ? (value / previous - 1) * 100 : null });
+    });
+    return result;
+}
+
 function buildCashDividends(dividendRows) {
     if (!Array.isArray(dividendRows)) return null;
     return dividendRows.map(row => ({
@@ -226,11 +265,13 @@ function buildCashDividends(dividendRows) {
 
 function buildValuationRows(dailyRows, financialRows, dividendRows, startDate, endDate) {
     const ttmEps = buildTtmEps(financialRows);
+    const ttmKcfj = buildTtmKcfj(financialRows);
     const cashDividends = buildCashDividends(dividendRows);
     const sourceRows = financialRows.map(row => {
         const date = datePart(row.REPORT_DATE);
         const close = nearestClose(dailyRows, date);
         const eps = ttmEps.get(date);
+        const kcfj = ttmKcfj.get(date);
         const bps = Number(row.BPS);
         const dividendPerShare = cashDividends == null ? null : cashDividends
             .filter(item => item.date > shiftYear(date, -1) && item.date <= date)
@@ -239,13 +280,14 @@ function buildValuationRows(dailyRows, financialRows, dividendRows, startDate, e
             date,
             pe: close > 0 && eps > 0 ? close / eps : null,
             pb: close > 0 && bps > 0 ? close / bps : null,
-            dividendYield: close > 0 && dividendPerShare != null ? dividendPerShare / close * 100 : null
+            dividendYield: close > 0 && dividendPerShare != null ? dividendPerShare / close * 100 : null,
+            ttmKcfjNetProfit: kcfj?.value ?? null, ttmKcfjGrowth: kcfj?.growth ?? null
         };
     }).filter(row => row.date >= startDate && row.date <= endDate).sort((a, b) => a.date.localeCompare(b.date));
-    const previous = { pe: null, pb: null, dividendYield: null };
+    const previous = { pe: null, pb: null, dividendYield: null, ttmKcfjNetProfit: null, ttmKcfjGrowth: null };
     return sourceRows.map(row => {
         const output = { ...row };
-        for (const field of ["pe", "pb", "dividendYield"]) {
+        for (const field of ["pe", "pb", "dividendYield", "ttmKcfjNetProfit", "ttmKcfjGrowth"]) {
             const flag = field === "dividendYield" ? "dividendFilled" : field + "Filled";
             output[flag] = output[field] == null && previous[field] != null;
             if (output[flag]) output[field] = previous[field];

@@ -23,25 +23,35 @@ function EChartView({ option, height = 420, ariaLabel, onEvents = EMPTY_EVENTS, 
         return () => {
             if (observer) observer.disconnect();
             window.removeEventListener("resize", resize);
-            chart.getZr().off("click", plotClick);
+            if (!chart.isDisposed?.()) chart.getZr().off("click", plotClick);
             chartRef.current = null;
-            chart.dispose();
+            if (!chart.isDisposed?.()) chart.dispose();
         };
     }, []);
     useEffect(() => {
-        chartRef.current?.setOption(option, true);
+        const chart = chartRef.current;
+        if (!chart || chart.isDisposed?.()) return;
+        const currentOption = chart.getOption?.() || {};
+        const previousLegend = currentOption.legend;
+        const previousSelected = previousLegend && previousLegend[0] && previousLegend[0].selected;
+        if (previousSelected && option && option.legend && !Array.isArray(option.legend)) {
+            chart.setOption({ ...option, legend: { ...option.legend,
+                selected: { ...(option.legend.selected || {}), ...previousSelected } } }, true);
+            return;
+        }
+        chart.setOption(option, true);
     }, [option]);
     useEffect(() => {
         const chart = chartRef.current;
-        if (!chart || activeDataIndex == null || activeDataIndex < 0) return;
+        if (!chart || chart.isDisposed?.() || activeDataIndex == null || activeDataIndex < 0) return;
         chart.dispatchAction({ type: "updateAxisPointer", xAxisIndex: 0, value: activeDataIndex });
         chart.dispatchAction({ type: "showTip", seriesIndex: 0, dataIndex: activeDataIndex });
     }, [option, activeDataIndex]);
     useEffect(() => {
         const chart = chartRef.current;
-        if (!chart) return undefined;
+        if (!chart || chart.isDisposed?.()) return undefined;
         Object.entries(onEvents).forEach(([event, handler]) => chart.on(event, handler));
-        return () => Object.entries(onEvents).forEach(([event, handler]) => chart.off(event, handler));
+        return () => { if (!chart.isDisposed?.()) Object.entries(onEvents).forEach(([event, handler]) => chart.off(event, handler)); };
     }, [onEvents]);
     useEffect(() => {
         const element = ref.current;

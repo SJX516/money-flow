@@ -4,7 +4,7 @@ import { InvestmentType } from "../entity/investment";
 import { calculateFinancingActivity } from "./market_activity";
 import { INDEX_GROUP_NAME } from "./market_constants";
 import MarketDatabase from "./market_database";
-import { fetchIndexHistory, fetchIndexInfo, fetchMarketHistory, fetchStockHistory, fetchStockInfo,
+import { calculateMovingAverages, fetchIndexHistory, fetchIndexInfo, fetchMarketHistory, fetchStockHistory, fetchStockInfo,
     normalizeIndexCode, normalizeSecurityCode, normalizeStockCode } from "./market_provider";
 import { TARGET_COLORS, targetMetrics } from "./market_target";
 import { deriveDailyValuation } from "./market_valuation";
@@ -262,32 +262,49 @@ class MarketDataService {
         if (options.append && existing) {
             const latestDate = db.getStockLatestDate(normalized);
             if (!latestDate) throw new Error(normalized + " 没有可补齐的历史日 K");
-            const overlap = new Date(latestDate + "T00:00:00");
-            overlap.setDate(overlap.getDate() - 45);
+            const overlap = new Date(latestDate + "T00:00:00Z");
+            overlap.setUTCDate(overlap.getUTCDate() - 45);
             actualStart = overlap.toISOString().slice(0, 10);
             if (actualStart < existing.start_date) actualStart = existing.start_date;
         }
         const isIndex = this.isIndexSecurity(normalized);
-        const data = isIndex
-            ? await fetchIndexHistory(normalized, actualStart, endDate, options.onProgress)
-            : await fetchStockHistory(normalized, actualStart, endDate, options.onProgress);
+        const fetchHistory = options.fetchHistory || (isIndex ? fetchIndexHistory : fetchStockHistory);
+        const data = await fetchHistory(normalized, actualStart, endDate, options.onProgress);
+        if (options.append && existing) {
+            const seedRows = db.getStockDailyBefore(normalized, actualStart, 29);
+            data.dailyRows = calculateMovingAverages(seedRows.concat(data.dailyRows)).slice(seedRows.length);
+        }
         if (!isIndex && options.append && existing) {
             const previousRows = db.getStockValuation(normalized, "1900-01-01", actualStart);
             this.mergePriorValuation(data.valuationRows, previousRows[previousRows.length - 1]);
         }
         db.saveStock(normalized, name || data.name, options.append && existing ? existing.start_date : startDate,
             endDate, data.dailyRows, data.valuationRows, Boolean(options.replace));
+        if (options.append && existing) this.repairStockMovingAverages(normalized);
         return { skipped: false, instrument: db.getInstrument(normalized), rows: data.dailyRows.length, warnings: data.warnings || [] };
+    }
+
+    static repairStockMovingAverages(code) {
+        const db = this.requireDb();
+        const normalized = normalizeSecurityCode(code);
+        const instrument = db.getInstrument(normalized);
+        if (!instrument) return 0;
+        const rows = db.getStockDaily(normalized, instrument.start_date, instrument.end_date);
+        db.updateStockMovingAverages(normalized, calculateMovingAverages(rows));
+        return rows.length;
     }
 
     static mergePriorValuation(rows, previousRow) {
         const previous = {
             pe: previousRow && previousRow.pe,
             pb: previousRow && previousRow.pb,
-            dividendYield: previousRow && previousRow.dividend_yield
+            dividendYield: previousRow && previousRow.dividend_yield,
+            ttmKcfjNetProfit: previousRow && previousRow.ttm_kcfj_net_profit,
+            ttmKcfjGrowth: previousRow && previousRow.ttm_kcfj_growth
         };
         rows.forEach(row => {
-            [["pe", "peFilled"], ["pb", "pbFilled"], ["dividendYield", "dividendFilled"]].forEach(([field, flag]) => {
+            [["pe", "peFilled"], ["pb", "pbFilled"], ["dividendYield", "dividendFilled"],
+                ["ttmKcfjNetProfit", "ttmKcfjNetProfitFilled"], ["ttmKcfjGrowth", "ttmKcfjGrowthFilled"]].forEach(([field, flag]) => {
                 if (row[field] == null && previous[field] != null) {
                     row[field] = previous[field];
                     row[flag] = true;
@@ -308,15 +325,41 @@ class MarketDataService {
         return this.buildStock(normalized, name, startDate, endDate, { onProgress });
     }
 
+    static fillStock(code, endDate, onProgress = () => {}) {
+        const db = this.requireDb();
+        const normalized = normalizeSecurityCode(code);
+        const instrument = db.getInstrument(normalized);
+        const latestDate = db.getStockLatestDate(normalized);
+        if (!instrument || !latestDate) throw new Error("请先构建该股票历史");
+        if (endDate < latestDate) throw new Error("补齐截止日期不能早于最后数据日期");
+        return this.buildStock(normalized, instrument.name, instrument.start_date, endDate,
+            { append: true, onProgress });
+    }
+
     static async buildMarket(startDate, endDate, options = {}) {
         this.validateRange(startDate, endDate);
         const db = this.requireDb();
         const existing = db.getInstrument("MARKET");
         if (existing && !options.replace && !options.append) return { skipped: true, instrument: existing };
-        const actualStart = options.append && existing ? existing.end_date : startDate;
-        const rows = await fetchMarketHistory(actualStart, endDate, options.onProgress);
+        const latestDate = options.append ? db.getMarketLatestDate() : null;
+        if (options.append && (!existing || !latestDate)) throw new Error("没有可补齐的成交额历史");
+        const actualStart = options.append ? latestDate : startDate;
+        const rows = await (options.fetchHistory || fetchMarketHistory)(actualStart, endDate, options.onProgress);
         db.saveMarket(options.append && existing ? existing.start_date : startDate, endDate, rows, Boolean(options.replace));
         return { skipped: false, instrument: db.getInstrument("MARKET"), rows: rows.length };
+    }
+
+    static fillMarket(endDate, onProgress = () => {}, options = {}) {
+        const db = this.requireDb();
+        const existing = db.getInstrument("MARKET");
+        const latestDate = db.getMarketLatestDate();
+        if (!existing || !latestDate) throw new Error("请先构建成交额历史");
+        if (endDate < latestDate) throw new Error("补齐截止日期不能早于最后数据日期");
+        return this.buildMarket(existing.start_date, endDate, { ...options, append: true, onProgress });
+    }
+
+    static removeMarket() {
+        this.requireDb().removeMarket();
     }
 
     static async rebuildAll(startDate, endDate, onProgress = () => {}, groupId = null) {
@@ -374,6 +417,13 @@ class MarketDataService {
         const valuationNodes = db.getStockValuation(normalized, "1900-01-01", endDate);
         const valuation = deriveDailyValuation(allDaily, valuationNodes)
             .filter(row => row.report_date >= startDate && row.report_date <= endDate);
+        console.info("[MarketDiag] stock data prepared", { code: normalized, instrument: instrument && instrument.name,
+            daily: daily.length, allDaily: allDaily.length, valuationNodes: valuationNodes.length, valuation: valuation.length,
+            ttmProfit: valuation.filter(row => row.ttm_kcfj_net_profit != null).length,
+            ttmGrowth: valuation.filter(row => row.ttm_kcfj_growth != null).length,
+            peg: valuation.filter(row => row.peg != null).length,
+            sample: valuation.slice(-2).map(row => ({ report_date: row.report_date, source_report_date: row.source_report_date,
+                ttm_kcfj_net_profit: row.ttm_kcfj_net_profit, ttm_kcfj_growth: row.ttm_kcfj_growth, peg: row.peg })) });
         return {
             instrument,
             daily,

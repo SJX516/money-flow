@@ -70,8 +70,8 @@ pages → services → entities → repositories → App.db/DBHelper
 
 ```bash
 npm test -- --runInBand   # 非交互运行 Jest 测试
-npm run build             # Windows/cmd 环境的生产构建
-npm run build:mac         # macOS/Linux shell 的生产构建
+npm run start             # Windows/cmd 环境的快速启动
+npm run start:mac         # macOS/Linux shell 的快速启动
 ```
 
 - 当前 `start`/`build` 脚本使用 Windows `set NODE_OPTIONS=...`；在 macOS/Linux/WSL 中使用 `start:mac`/`build:mac`。

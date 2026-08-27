@@ -3,7 +3,7 @@ import initSqlJs from "sql.js";
 import sqlWasm from "!!file-loader?name=sql-wasm-[contenthash].wasm!sql.js/dist/sql-wasm.wasm";
 import { INDEX_GROUP_NAME } from "./market_constants";
 
-const MARKET_DB_VERSION = "5";
+const MARKET_DB_VERSION = "6";
 const REQUIRED_TABLES = ["market_meta", "market_instrument", "stock_daily", "stock_valuation", "market_daily",
     "market_target", "stock_group", "stock_watchlist"];
 
@@ -25,6 +25,9 @@ class MarketDatabase {
         const helper = new MarketDatabase(new SQL.Database(new Uint8Array(buffer)));
         helper.migrate();
         helper.validate();
+        const instruments = helper.rows("SELECT code,type FROM market_instrument ORDER BY code");
+        const valuation = helper.rows("SELECT code,COUNT(*) AS nodes,SUM(ttm_kcfj_net_profit IS NOT NULL) AS profit_nodes,SUM(ttm_kcfj_growth IS NOT NULL) AS growth_nodes FROM stock_valuation GROUP BY code");
+        console.info("[MarketDiag] database loaded", { name: file && file.name, version: helper.getMeta("db_version"), instruments, valuation });
         return helper;
     }
 
@@ -32,7 +35,7 @@ class MarketDatabase {
         this.db.run("CREATE TABLE market_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
         this.db.run("CREATE TABLE market_instrument (code TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL, updated_at TEXT NOT NULL)");
         this.db.run("CREATE TABLE stock_daily (code TEXT NOT NULL, trade_date TEXT NOT NULL, open REAL NOT NULL, close REAL NOT NULL, high REAL NOT NULL, low REAL NOT NULL, volume REAL, amount REAL, turnover_rate REAL, ma5 REAL, ma30 REAL, PRIMARY KEY (code, trade_date))");
-        this.db.run("CREATE TABLE stock_valuation (code TEXT NOT NULL, report_date TEXT NOT NULL, pe REAL, pb REAL, dividend_yield REAL, pe_filled INTEGER NOT NULL DEFAULT 0, pb_filled INTEGER NOT NULL DEFAULT 0, dividend_filled INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (code, report_date))");
+        this.db.run("CREATE TABLE stock_valuation (code TEXT NOT NULL, report_date TEXT NOT NULL, pe REAL, pb REAL, dividend_yield REAL, ttm_kcfj_net_profit REAL, ttm_kcfj_growth REAL, pe_filled INTEGER NOT NULL DEFAULT 0, pb_filled INTEGER NOT NULL DEFAULT 0, dividend_filled INTEGER NOT NULL DEFAULT 0, ttm_kcfj_net_profit_filled INTEGER NOT NULL DEFAULT 0, ttm_kcfj_growth_filled INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (code, report_date))");
         this.db.run("CREATE TABLE market_daily (trade_date TEXT PRIMARY KEY, turnover_trillion REAL, margin_trillion REAL)");
         this.createTargetTable();
         this.createWatchlistTables();
@@ -92,6 +95,17 @@ class MarketDatabase {
         if (version === "4") {
             this.transaction(() => {
                 this.ensureIndexGroup();
+                this.setMeta("db_version", MARKET_DB_VERSION);
+            });
+            version = "5";
+        }
+        if (version === "5") {
+            this.transaction(() => {
+                const columns = this.rows("PRAGMA table_info(stock_valuation)").map(row => row.name);
+                if (!columns.includes("ttm_kcfj_net_profit")) this.run("ALTER TABLE stock_valuation ADD COLUMN ttm_kcfj_net_profit REAL");
+                if (!columns.includes("ttm_kcfj_growth")) this.run("ALTER TABLE stock_valuation ADD COLUMN ttm_kcfj_growth REAL");
+                if (!columns.includes("ttm_kcfj_net_profit_filled")) this.run("ALTER TABLE stock_valuation ADD COLUMN ttm_kcfj_net_profit_filled INTEGER NOT NULL DEFAULT 0");
+                if (!columns.includes("ttm_kcfj_growth_filled")) this.run("ALTER TABLE stock_valuation ADD COLUMN ttm_kcfj_growth_filled INTEGER NOT NULL DEFAULT 0");
                 this.setMeta("db_version", MARKET_DB_VERSION);
             });
         }
@@ -238,6 +252,11 @@ class MarketDatabase {
         return this.rows("SELECT COUNT(*) AS row_count,MAX(trade_date) AS latest_date FROM market_daily")[0] || { row_count: 0, latest_date: null };
     }
 
+    getMarketLatestDate() {
+        const row = this.rows("SELECT MAX(trade_date) AS latest_date FROM market_daily")[0];
+        return row && row.latest_date ? row.latest_date : null;
+    }
+
     getInstrument(code) {
         return this.rows("SELECT * FROM market_instrument WHERE code=?", [code])[0] || null;
     }
@@ -256,8 +275,9 @@ class MarketDatabase {
                 code, row.date, row.open, row.close, row.high, row.low, row.volume, row.amount,
                 row.turnoverRate == null ? null : row.turnoverRate, row.ma5, row.ma30
             ]));
-            valuationRows.forEach(row => this.run("INSERT OR REPLACE INTO stock_valuation (code,report_date,pe,pb,dividend_yield,pe_filled,pb_filled,dividend_filled) VALUES (?,?,?,?,?,?,?,?)", [
-                code, row.date, row.pe, row.pb, row.dividendYield, row.peFilled ? 1 : 0, row.pbFilled ? 1 : 0, row.dividendFilled ? 1 : 0
+            valuationRows.forEach(row => this.run("INSERT OR REPLACE INTO stock_valuation (code,report_date,pe,pb,dividend_yield,ttm_kcfj_net_profit,ttm_kcfj_growth,pe_filled,pb_filled,dividend_filled,ttm_kcfj_net_profit_filled,ttm_kcfj_growth_filled) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", [
+                code, row.date, row.pe, row.pb, row.dividendYield, row.ttmKcfjNetProfit ?? null, row.ttmKcfjGrowth ?? null,
+                row.peFilled ? 1 : 0, row.pbFilled ? 1 : 0, row.dividendFilled ? 1 : 0, row.ttmKcfjNetProfitFilled ? 1 : 0, row.ttmKcfjGrowthFilled ? 1 : 0
             ]));
         });
     }
@@ -277,8 +297,26 @@ class MarketDatabase {
         return this.rows("SELECT * FROM stock_daily WHERE code=? AND trade_date>=? AND trade_date<=? ORDER BY trade_date", [code, startDate, endDate]);
     }
 
+    getStockDailyBefore(code, beforeDate, limit) {
+        return this.rows("SELECT * FROM (SELECT * FROM stock_daily WHERE code=? AND trade_date<? ORDER BY trade_date DESC LIMIT ?) ORDER BY trade_date", [
+            code, beforeDate, limit
+        ]);
+    }
+
+    updateStockMovingAverages(code, rows) {
+        this.transaction(() => rows.forEach(row => this.run(
+            "UPDATE stock_daily SET ma5=?,ma30=? WHERE code=? AND trade_date=?",
+            [row.ma5, row.ma30, code, row.trade_date || row.date]
+        )));
+    }
+
     getStockValuation(code, startDate, endDate) {
-        return this.rows("SELECT * FROM stock_valuation WHERE code=? AND report_date>=? AND report_date<=? ORDER BY report_date", [code, startDate, endDate]);
+        const result = this.rows("SELECT * FROM stock_valuation WHERE code=? AND report_date>=? AND report_date<=? ORDER BY report_date", [code, startDate, endDate]);
+        console.info("[MarketDiag] valuation read", { code, startDate, endDate, nodes: result.length,
+            profitNodes: result.filter(row => row.ttm_kcfj_net_profit != null).length,
+            growthNodes: result.filter(row => row.ttm_kcfj_growth != null).length,
+            sample: result.slice(-2).map(row => ({ report_date: row.report_date, ttm_kcfj_net_profit: row.ttm_kcfj_net_profit, ttm_kcfj_growth: row.ttm_kcfj_growth })) });
+        return result;
     }
 
     saveMarket(startDate, endDate, rows, replace = false) {
@@ -288,6 +326,13 @@ class MarketDatabase {
                 row.date, row.turnoverTrillion, row.marginTrillion
             ]));
             this.saveInstrument({ code: "MARKET", name: "沪深两市", type: "market", startDate, endDate });
+        });
+    }
+
+    removeMarket() {
+        this.transaction(() => {
+            this.run("DELETE FROM market_daily");
+            this.run("DELETE FROM market_instrument WHERE code='MARKET'");
         });
     }
 
