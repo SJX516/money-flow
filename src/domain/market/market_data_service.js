@@ -316,7 +316,9 @@ class MarketDataService {
     }
 
     static removeStock(code) {
-        this.requireDb().removeStock(normalizeSecurityCode(code));
+        const db = this.requireDb();
+        const normalized = normalizeSecurityCode(code);
+        db.transaction(() => db.removeStock(normalized));
     }
 
     static async rebuildStock(code, name, startDate, endDate, onProgress) {

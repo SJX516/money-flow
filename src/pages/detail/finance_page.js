@@ -147,12 +147,10 @@ class FinancePage extends React.Component {
         return MarketDataService.buildMarket(this.state.startDate, this.state.endDate, { onProgress });
     }, "成交额历史已重建并自动导出", { autoExport: true });
 
-    removeStock = () => {
+    removeStock = () => this.run("正在删除当前股票数据…", () => {
         MarketDataService.removeStock(this.state.selectedCode);
-        saveLastStock(null);
-        message.success("已从行情 DB 移除该股票");
-        this.refreshState(null);
-    }
+        this.setState({ stockSelectedDate: null });
+    }, "该股票行情及财务数据已删除，目标指标已保留，并已自动导出", { autoExport: true });
 
     removeIndex = () => {
         MarketDataService.removeStock(this.state.selectedIndexCode);
@@ -293,6 +291,10 @@ class FinancePage extends React.Component {
                         <Button type="primary" disabled={!dbReady || loading || !selectedCode}>重新构建</Button>
                     </Popconfirm></Col>
                     <Col><Button disabled={!built || loading} onClick={this.fillStock}>补齐</Button></Col>
+                    <Col><Popconfirm title="确认删除该股票的行情及财务数据？用户添加的目标指标会保留。"
+                        onConfirm={this.removeStock}>
+                        <Button danger disabled={!dbReady || !built || loading}>删除数据</Button>
+                    </Popconfirm></Col>
                     <Col flex="auto" />
                     <Col><Space wrap>
                         <Popconfirm title="将依次删除并重建全部股票历史，可能耗时较长，确认继续？"

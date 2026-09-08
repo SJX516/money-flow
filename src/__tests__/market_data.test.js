@@ -629,6 +629,42 @@ describe("独立行情数据", () => {
         expect(() => MarketDataService.deleteStockGroup(indexGroup.id)).toThrow("不可删除");
     });
 
+    test("单只股票删除保留目标与观察列表，不影响其他股票，失败时回滚", async () => {
+        const previousDb = App.marketDb;
+        const db = await MarketDatabase.create();
+        App.marketDb = db;
+        try {
+            const daily = [{ date: "2025-01-02", open: 10, close: 11, high: 12, low: 9,
+                volume: 100, amount: 1000, ma5: null, ma30: null }];
+            const valuation = [{ date: "2025-03-31", pe: 10, pb: 2, dividendYield: 3 }];
+            ["600001.SH", "600002.SH"].forEach(code => {
+                db.saveStock(code, "虚构股票", "2025-01-01", "2025-12-31", daily, valuation);
+                db.saveTarget(code, "pe", 20, "保留目标", "#ef4444");
+            });
+            db.saveWatchStock("600001.SH", "虚构股票", null);
+            const targets = db.listTargets("600001.SH");
+            const originalRun = db.run.bind(db);
+            const failure = jest.spyOn(db, "run").mockImplementation((sql, values) => {
+                if (sql.includes("DELETE FROM stock_valuation")) throw new Error("模拟删除失败");
+                return originalRun(sql, values);
+            });
+            expect(() => MarketDataService.removeStock("600001.SH")).toThrow("模拟删除失败");
+            failure.mockRestore();
+            expect(db.getStockDaily("600001.SH", "2025-01-01", "2025-12-31")).toHaveLength(1);
+            MarketDataService.removeStock("600001.SH");
+            expect(db.getInstrument("600001.SH")).toBeNull();
+            expect(db.getStockDaily("600001.SH", "2025-01-01", "2025-12-31")).toEqual([]);
+            expect(db.getStockValuation("600001.SH", "2025-01-01", "2025-12-31")).toEqual([]);
+            expect(db.listTargets("600001.SH")).toEqual(targets);
+            expect(db.rows("SELECT * FROM stock_watchlist WHERE code=?", ["600001.SH"])).toHaveLength(1);
+            expect(db.getStockDaily("600002.SH", "2025-01-01", "2025-12-31")).toHaveLength(1);
+            expect(db.getStockValuation("600002.SH", "2025-01-01", "2025-12-31")).toHaveLength(1);
+            expect(db.listTargets("600002.SH")).toHaveLength(1);
+        } finally {
+            App.marketDb = previousDb;
+        }
+    });
+
     test("行情 DB 独立保存股票、大盘、默认范围并支持按股票移除", async () => {
         const db = await MarketDatabase.create();
         db.setDefaultRange("2020-01-01", "2026-01-01");
