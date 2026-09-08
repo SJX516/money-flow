@@ -95,3 +95,12 @@ npm run start:mac         # macOS/Linux shell 的快速启动
 - commit message 使用中文 Conventional Commits：`feat:`、`fix:`、`refactor:`、`test:`、`docs:`、`perf:`、`chore:`、`revert:`。
 - 一个提交只解决一个清晰问题；不要混入生成物、个人数据库或无关格式化。
 - 发布版本时同步核对 `package.json#version`、`src/app.js` 中的 `_version` 和 `ChangeLog.md`，不要只更新其中一处。
+
+### 正式发布流程
+
+用户明确要求发布后，按以下顺序执行；发布请求包含版本更新、提交、推送和正式部署的授权。
+
+1. **修改版本号并添加 Changelog**：检查工作区、当前分支及远端状态，确认本次发布范围；递增 `package.json#version`，按现有日期格式更新 `src/app.js#_version`，在 `ChangeLog.md` 顶部记录对应版本、发布日期和具体变更。包版本与界面日期版本沿用各自格式，并在日志中注明对应关系。不要手工修改依赖锁文件。
+2. **验证、提交并 git push**：执行 `npm test -- --runInBand` 和生产构建，检查 diff，排除生成物、个人数据库和无关改动。按清晰问题拆分中文 Conventional Commits 提交，再执行 `git push origin <当前发布源码分支>`，确认远端提交与本地一致；不得强制推送或擅自合并分支。
+3. **正式部署**：源码推送成功后，通过现有 `gh-pages` 流程发布到 GitHub Pages。Windows 可执行 `npm run deploy`（自动运行 `predeploy`）；macOS/Linux/WSL 先执行 `npm run build:mac`，再执行 `npm exec -- gh-pages -d build`，避免触发 Windows 专用构建脚本。构建输出不得提交到源码分支；也可通过 `BUILD_PATH` 将构建输出放到临时目录，并让 `gh-pages -d` 指向该目录。
+4. **核验发布结果**：确认 `gh-pages` 远端更新，并检查正式站点能访问且加载本次构建资源。若 GitHub Pages 尚未刷新，继续检查发布状态，不能仅凭推送成功宣称站点已更新。汇报版本、源码提交、正式地址和验证结果。
