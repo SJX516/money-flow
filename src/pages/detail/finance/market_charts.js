@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { compactNumber, mapTradesToRows } from "./chart_utils";
 import EChartView from "./echart_view";
+import { valuationTooltip } from "./valuation_tooltip";
 
 const UP = "#ef4444";
 const DOWN = "#22c55e";
@@ -162,14 +163,7 @@ function ValuationChart({ rows, metrics, targets = [], activeDate, onDateChange 
             lineStyle: { color: metric.color, width: 1.6 }
         }));
         return { animation: false, aria: { enabled: true },
-            tooltip: baseTooltip(params => {
-                const row = valid[params[0] && params[0].dataIndex];
-                if (!row) return "";
-                return "<b>" + row.report_date + "</b><br/>" + visible.map(metric =>
-                    '<span style="color:' + metric.color + '">●</span> ' + metric.name + "：" +
-                    (row[metric.field] == null ? "-" : Number(row[metric.field]).toFixed(2))).join("<br/>") +
-                    '<br/><span style="color:#9ca3af">基于 ' + row.source_report_date + " 财报期 TTM 数据计算</span>";
-            }),
+            tooltip: baseTooltip(params => valuationTooltip(params, valid, selected)),
             legend: { top: 0, icon: "path://M0 4 L24 4 L24 6 L0 6 Z", itemWidth: 24, itemHeight: 8,
                 data: selected.map(item => item.name), selected: { "PB": false, "股息率（TTM）": false }, textStyle: { color: AXIS } },
             grid: { left: 64, right: 180, top: 46, bottom: 50 },
